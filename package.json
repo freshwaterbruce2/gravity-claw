@@ -11,7 +11,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext ts,tsx"
+    "lint": "eslint src --ext ts,tsx",
+    "self-improve": "powershell -ExecutionPolicy Bypass -File scripts/apply-improvement.ps1"
   },
   "dependencies": {
     "@react-oauth/google": "^0.12.1",
