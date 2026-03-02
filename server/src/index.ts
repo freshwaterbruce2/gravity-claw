@@ -3,8 +3,63 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { stream } from 'hono/streaming';
+import { Telegraf } from 'telegraf';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 const app = new Hono();
+
+// ── Telegram Bridge ───────────────────────────────────────────────────────────
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (TELEGRAM_TOKEN && ANTHROPIC_API_KEY) {
+  console.log(`\n  🤖 Initializing Telegram Bridge...`);
+  const bot = new Telegraf(TELEGRAM_TOKEN);
+  const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+  bot.on('text', async (ctx) => {
+    try {
+      const userMessage = ctx.message.text;
+      
+      // Sending typing action to make it feel alive
+      await ctx.sendChatAction('typing');
+      
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: 'You are G-CLAW, an advanced autonomous AI agent assistant. Keep your responses concise, helpful, and agent-like. You have capabilities across 34+ skills including file management, web search, and data analysis.',
+        messages: [{ role: 'user', content: userMessage }],
+      });
+
+      // Extract the text content from the Anthropic response
+      const replyText = response.content
+        .filter(block => block.type === 'text')
+        .map(block => block.text)
+        .join('');
+        
+      if (replyText) {
+        await ctx.reply(replyText);
+      } else {
+        await ctx.reply("System: Output generated no text.");
+      }
+    } catch (err: any) {
+      console.error('Telegram Bridge Error:', err);
+      await ctx.reply(`[Agent Error]: ${err.message || 'Failed to process request via Anthropic API'}`);
+    }
+  });
+
+  bot.launch()
+    .then(() => console.log('  ✅ Telegram Bridge Online'))
+    .catch(err => console.error('  ❌ Failed to launch Telegram Bridge:', err));
+
+  // Enable graceful stop
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+} else {
+  console.log(`\n  ⚠️ Telegram Bridge inactive: Missing TELEGRAM_BOT_TOKEN or ANTHROPIC_API_KEY in .env`);
+}
 
 // ── CORS — only allow local dev frontend ──────────────────────────────────────
 app.use(
@@ -31,7 +86,7 @@ app.post('/api/chat', async (c) => {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { messages, model = 'claude-sonnet-4-20250514', apiKey, system } = body;
+  const { messages, model = 'claude-sonnet-4-6', apiKey, system } = body;
 
   if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('sk-ant-')) {
     return c.json({ error: 'Missing or invalid Anthropic API key. Add it in Settings.' }, 401);
@@ -71,9 +126,9 @@ app.post('/api/chat', async (c) => {
 app.get('/api/models', (c) => {
   return c.json({
     models: [
-      { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'anthropic' },
-      { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', provider: 'anthropic' },
-      { id: 'claude-haiku-3-5-20241022', label: 'Claude Haiku 3.5', provider: 'anthropic' },
+      { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'anthropic' },
+      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic' },
+      { id: 'claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', provider: 'anthropic' },
     ],
   });
 });

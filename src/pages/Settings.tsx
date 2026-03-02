@@ -3,7 +3,13 @@ import { useAgentStore } from '../stores/agentStore';
 import { useAuthStore } from '../stores/authStore';
 import './Settings.css';
 
-const MODELS = ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-haiku-3-5-20241022'];
+const MODELS = [
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  'gemini-3.1-pro-preview',
+  'gemini-3-flash',
+  'gemini-2.5-pro',
+];
 const PLATFORMS = [
   { id: 'telegram', label: 'Telegram', icon: '✈️' },
   { id: 'discord', label: 'Discord', icon: '🎮' },

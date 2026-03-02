@@ -62,7 +62,7 @@ let seedTime = Date.now() - 8 * 60 * 1000;
 
 export const useAgentStore = create<AgentState>((set) => ({
   name: 'G-CLAW-01',
-  model: 'gemini-2.0-flash',
+  model: 'claude-sonnet-4-6',
   status: 'online',
   uptime: 14400 + Math.floor(Math.random() * 3600),
   messageCount: 247,

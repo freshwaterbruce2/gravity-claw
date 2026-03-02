@@ -59,7 +59,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearMessages: () => set({ messages: [WELCOME] }),
 
-  sendMessage: async (userText: string, apiKey: string, model = 'claude-sonnet-4-20250514') => {
+  sendMessage: async (userText: string, apiKey: string, model = 'claude-sonnet-4-6') => {
     const { addMessage, updateMessage, setTyping, messages } = get();
 
     // Add user message

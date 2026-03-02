@@ -135,7 +135,25 @@ export default function LoginScreen() {
           {keyError && <p className="key-error font-code text-xs">{keyError}</p>}
         </div>
 
-        <div className="login-footer font-code text-xs text-muted">
+        {/* ── OR divider ──────────────────────────────────────── */}
+        <div className="auth-or" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+          <span className="auth-or-line" />
+          <span className="font-code text-xs text-muted">DEVELOPER BYPASS</span>
+          <span className="auth-or-line" />
+        </div>
+
+        <button
+          className="btn btn-ghost"
+          style={{ width: '100%', padding: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}
+          onClick={() => {
+            // Bypass login with a mock Anthropic key so they can see the dashboard
+            loginWithAnthropic('sk-ant-dev-bypass-12345');
+          }}
+        >
+          Skip Login & Enter Dashboard →
+        </button>
+
+        <div className="login-footer font-code text-xs text-muted" style={{ marginTop: '1rem' }}>
           Personal use only · Vibe-Tech Monorepo
         </div>
       </div>
