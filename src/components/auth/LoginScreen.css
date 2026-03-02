@@ -1,0 +1,245 @@
+/* ── Login Screen ─────────────────────────────────────────────── */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-void);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+/* Grid background */
+.login-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.35;
+  animation: grid-scroll 20s linear infinite;
+}
+
+@keyframes grid-scroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 48px 48px;
+  }
+}
+
+/* Glow orb */
+.login-orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 600px;
+  height: 600px;
+  transform: translate(-50%, -60%);
+  background: radial-gradient(circle, #d97706 0%, transparent 70%);
+  opacity: 0.07;
+  pointer-events: none;
+  animation: orb-pulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes orb-pulse {
+  from {
+    opacity: 0.05;
+    transform: translate(-50%, -60%) scale(1);
+  }
+  to {
+    opacity: 0.11;
+    transform: translate(-50%, -60%) scale(1.12);
+  }
+}
+
+/* Scanlines */
+.scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.06) 2px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+}
+
+/* Card */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 480px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  box-shadow:
+    0 24px 80px #00000060,
+    0 0 0 1px #d9770612;
+  animation: card-in 0.5s var(--ease-out) both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Logo */
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.login-logo-icon {
+  font-size: 36px;
+}
+.login-logo-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+}
+.login-logo-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.login-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border), transparent);
+}
+
+.login-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.login-headline {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.25;
+  margin: 0;
+}
+
+/* Auth options */
+.auth-option {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.auth-option-label {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.ml-2 {
+  margin-left: var(--sp-2);
+}
+
+.auth-option-desc {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.login-btn-wrap {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* OR divider */
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.auth-or-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Anthropic key input */
+.key-input-row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.key-input-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.key-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--sp-3);
+  padding-right: 60px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-code);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  box-sizing: border-box;
+}
+.key-input--error {
+  border-color: var(--red) !important;
+}
+
+.key-toggle-btn {
+  position: absolute;
+  right: var(--sp-2);
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  border: none;
+  transition: color var(--dur-fast);
+}
+.key-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.key-submit-btn {
+  height: 40px;
+  white-space: nowrap;
+  padding: 0 var(--sp-4);
+}
+
+.key-error {
+  color: var(--red);
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+/* Footer */
+.login-footer {
+  text-align: center;
+  letter-spacing: 0.06em;
+}
