@@ -8,7 +8,7 @@
     "server": "tsx server/src/index.ts",
     "server:dev": "tsx watch server/src/index.ts",
     "start": "concurrently \"pnpm dev\" \"pnpm server:dev\" --names \"ui,api\" --prefix-colors \"yellow,cyan\"",
-    "start:full": "concurrently \"pnpm dev\" \"pnpm server:dev\" \"pnpm --filter @vibetech/mcp-gateway dev\" \"pnpm inngest:dev\" --names \"ui,api,mcp,inngest\" --prefix-colors \"yellow,cyan,green,magenta\"",
+    "start:full": "concurrently \"pnpm dev\" \"pnpm server:dev\" \"node --import tsx ../../apps/mcp-gateway/src/index.ts\" \"pnpm inngest:dev\" --names \"ui,api,mcp,inngest\" --prefix-colors \"yellow,cyan,green,magenta\"",
     "desktop": "electron electron/main.mjs",
     "desktop:dev": "node scripts/start-desktop-dev.mjs",
     "build": "pnpm run typecheck && pnpm run typecheck:server && vite build",

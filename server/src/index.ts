@@ -45,9 +45,25 @@ if (fs.existsSync(soulPath)) {
 let geminiFunctionTool: GeminiFunctionTool | null = null;
 let availableMcpToolsMap: Record<string, { server: string; tool: string }> = {};
 
-async function refreshMcpTools() {
+async function refreshMcpTools(retries = 0) {
+  const MAX_RETRIES = 10;
+  const getDelay = (attempt: number) => Math.min(5000 * 2 ** attempt, 30000);
+
   console.log('  🔄 Fetching MCP Tools from Gateway...');
-  const serverTools = await fetchAllMcpTools();
+  let serverTools;
+  try {
+    serverTools = await fetchAllMcpTools();
+  } catch (err: any) {
+    if (retries < MAX_RETRIES) {
+      const delay = getDelay(retries);
+      console.log(`  ⏳ Gateway not ready, retrying in ${delay / 1000}s (${retries + 1}/${MAX_RETRIES})...`);
+      setTimeout(() => refreshMcpTools(retries + 1), delay);
+      return;
+    }
+    console.log(`  ⚠️ Gateway unreachable after ${MAX_RETRIES} retries: ${err.message}`);
+    return;
+  }
+
   const declarations = convertMcpToolsToGeminiDeclarations(serverTools);
 
   if (declarations.length > 0) {
@@ -60,10 +76,14 @@ async function refreshMcpTools() {
       }
     }
     console.log(`  ✅ Loaded ${declarations.length} MCP Tools.`);
+  } else if (retries < MAX_RETRIES) {
+    const delay = getDelay(retries);
+    console.log(`  ⏳ No tools yet, retrying in ${delay / 1000}s (${retries + 1}/${MAX_RETRIES})...`);
+    setTimeout(() => refreshMcpTools(retries + 1), delay);
   } else {
     geminiFunctionTool = null;
     availableMcpToolsMap = {};
-    console.log('  ⚠️ No MCP Tools found or Gateway offline.');
+    console.log(`  ⚠️ No MCP Tools found after ${MAX_RETRIES} retries.`);
   }
 }
 
