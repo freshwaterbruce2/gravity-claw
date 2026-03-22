@@ -1,84 +1,234 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI, type FunctionDeclaration } from '@google/generative-ai';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { stream } from 'hono/streaming';
 import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import { serve as serveInngest } from 'inngest/hono';
+import { inngest } from '@vibetech/inngest-client';
+import { allFunctions, setHeartbeatDeps, setToolRefreshDeps } from './inngest-functions.js';
+import { fetchAllMcpTools, convertMcpToolsToGeminiDeclarations, executeMcpTool } from './mcp.js';
 
-dotenv.config();
+dotenv.config({ override: true });
+
+// ── Configuration ────────────────────────────────────────────────────────────
+const DEFAULT_MODEL = 'gemini-flash-latest';
+const FALLBACK_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-3.1-pro-preview',
+  'gemini-3-pro-preview',
+];
+const MAX_TOOL_ROUNDS = 10;
+const PORT = Number(process.env.GRAVITY_CLAW_PORT ?? 5178);
+
+type GeminiFunctionTool = {
+  functionDeclarations: FunctionDeclaration[];
+};
 
 const app = new Hono();
 
-// ── Telegram Bridge ───────────────────────────────────────────────────────────
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+// ── 1. Load Soul (Personality) ───────────────────────────────────────────────
+const soulPath = path.join(process.cwd(), 'server', 'src', 'soul.md');
+let soulContent = 'You are G-CLAW, an advanced autonomous AI agent assistant.';
+if (fs.existsSync(soulPath)) {
+  soulContent = fs.readFileSync(soulPath, 'utf-8');
+  console.log('  🧠 Loaded soul.md personality matrix.');
+} else {
+  console.log('  ⚠️ soul.md not found, using default personality.');
+}
 
-if (TELEGRAM_TOKEN && ANTHROPIC_API_KEY) {
-  console.log(`\n  🤖 Initializing Telegram Bridge...`);
-  const bot = new Telegraf(TELEGRAM_TOKEN);
-  const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+// ── 2. MCP Tools ─────────────────────────────────────────────────────────────
+let geminiFunctionTool: GeminiFunctionTool | null = null;
+let availableMcpToolsMap: Record<string, { server: string; tool: string }> = {};
+
+async function refreshMcpTools() {
+  console.log('  🔄 Fetching MCP Tools from Gateway...');
+  const serverTools = await fetchAllMcpTools();
+  const declarations = convertMcpToolsToGeminiDeclarations(serverTools);
+
+  if (declarations.length > 0) {
+    geminiFunctionTool = { functionDeclarations: declarations };
+    availableMcpToolsMap = {};
+    for (const st of serverTools) {
+      for (const t of st.tools) {
+        const safeName = `${st.server}_${t.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+        availableMcpToolsMap[safeName] = { server: st.server, tool: t.name };
+      }
+    }
+    console.log(`  ✅ Loaded ${declarations.length} MCP Tools.`);
+  } else {
+    geminiFunctionTool = null;
+    availableMcpToolsMap = {};
+    console.log('  ⚠️ No MCP Tools found or Gateway offline.');
+  }
+}
+
+refreshMcpTools();
+
+// Wire up Inngest MCP tools refresh deps
+setToolRefreshDeps({ refreshMcpTools });
+
+// ── 3. Gemini Helpers ────────────────────────────────────────────────────────
+function getSystemInstruction() {
+  return `${soulContent}\n\nYou have capabilities across 34+ skills including file management, web search, and data analysis via MCP Tools. Always prioritize using your tools to answer questions precisely.`;
+}
+
+function createModel(genAI: GoogleGenerativeAI, modelId: string = DEFAULT_MODEL) {
+  return genAI.getGenerativeModel({
+    model: modelId,
+    systemInstruction: getSystemInstruction(),
+    tools: geminiFunctionTool ? [geminiFunctionTool] : undefined,
+  });
+}
+
+async function handleFunctionCalls(_model: any, chatSession: any, response: any): Promise<string> {
+  let currentResponse = response;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const functionCalls = currentResponse.functionCalls();
+    if (!functionCalls || functionCalls.length === 0) {
+      return currentResponse.text() || '';
+    }
+
+    const functionResponses = await Promise.all(
+      functionCalls.map(async (call: any) => {
+        console.log(`  🛠️ Executing tool: ${call.name}`);
+        const mapping = availableMcpToolsMap[call.name];
+        const resultData = mapping
+          ? await executeMcpTool(mapping.server, mapping.tool, call.args)
+          : { error: `Tool ${call.name} not found.` };
+
+        return {
+          functionResponse: {
+            name: call.name,
+            response: { name: call.name, content: resultData },
+          },
+        };
+      })
+    );
+
+    console.log(`  ⬅️ Returning ${functionResponses.length} tool result(s) to model...`);
+    currentResponse = (await chatSession.sendMessage(functionResponses)).response;
+  }
+
+  return currentResponse.text() || '[Max tool rounds reached]';
+}
+
+/** Try the primary model, fall back on 503/overloaded errors */
+async function sendWithFallback(
+  genAI: GoogleGenerativeAI,
+  userMessage: string,
+  history: { role: string; parts: { text: string }[] }[] = []
+): Promise<string> {
+  const modelsToTry = [DEFAULT_MODEL, ...FALLBACK_MODELS];
+
+  for (const modelId of modelsToTry) {
+    try {
+      const model = createModel(genAI, modelId);
+      const chatSession = model.startChat({ history });
+      const result = await chatSession.sendMessage(userMessage);
+      const reply = await handleFunctionCalls(model, chatSession, result.response);
+      if (modelId !== DEFAULT_MODEL) {
+        console.log(`  ⚡ Used fallback model: ${modelId}`);
+      }
+      return reply;
+    } catch (err: any) {
+      const status = err?.status || err?.response?.status;
+      const isFetchError = err?.message?.includes('fetch failed') || err?.message?.includes('Error fetching from');
+      
+      if (status === 503 || status === 429 || status === 500 || isFetchError) {
+        console.log(`  ⚠️ ${modelId} unavailable (Status: ${status || 'fetch failed'}), trying next...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('All models unavailable. Try again later.');
+}
+
+// ── 4. Telegram Bridge ───────────────────────────────────────────────────────
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+if (TELEGRAM_TOKEN && GEMINI_API_KEY) {
+  console.log(`\n  🤖 Initializing Telegram Bridge (${DEFAULT_MODEL})...`);
+  const bot = new Telegraf(TELEGRAM_TOKEN, { handlerTimeout: 9_000_000 });
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
   bot.on('text', async (ctx) => {
+    console.log(`\n  📩 Received message from ${ctx.from?.username || ctx.from?.first_name}: ${ctx.message.text.substring(0, 50)}...`);
     try {
-      const userMessage = ctx.message.text;
-      
-      // Sending typing action to make it feel alive
       await ctx.sendChatAction('typing');
-      
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: 'You are G-CLAW, an advanced autonomous AI agent assistant. Keep your responses concise, helpful, and agent-like. You have capabilities across 34+ skills including file management, web search, and data analysis.',
-        messages: [{ role: 'user', content: userMessage }],
-      });
+      const reply = await sendWithFallback(genAI, ctx.message.text);
 
-      // Extract the text content from the Anthropic response
-      const replyText = response.content
-        .filter(block => block.type === 'text')
-        .map(block => block.text)
-        .join('');
-        
-      if (replyText) {
-        await ctx.reply(replyText);
+      if (reply) {
+        // Telegram has a 4096 char limit per message
+        if (reply.length > 4096) {
+          for (let i = 0; i < reply.length; i += 4096) {
+            await ctx.reply(reply.slice(i, i + 4096));
+          }
+        } else {
+          await ctx.reply(reply);
+        }
       } else {
-        await ctx.reply("System: Output generated no text.");
+        await ctx.reply('System: No text generated.');
       }
+      console.log('  ✅ Replied successfully.');
     } catch (err: any) {
-      console.error('Telegram Bridge Error:', err);
-      await ctx.reply(`[Agent Error]: ${err.message || 'Failed to process request via Anthropic API'}`);
+      console.error('  ❌ Telegram error:', err.message || err);
+      await ctx.reply(`[G-CLAW Error]: ${err.message || 'Request failed'}`);
     }
   });
 
-  bot.launch()
-    .then(() => console.log('  ✅ Telegram Bridge Online'))
-    .catch(err => console.error('  ❌ Failed to launch Telegram Bridge:', err));
+  // Wire up Inngest heartbeat deps (replaces node-cron)
+  setHeartbeatDeps({
+    sendWithFallback,
+    getGenAI: () => genAI,
+    getTelegramBot: () => bot,
+    getChatId: () => process.env.TELEGRAM_ALLOWED_USER_IDS?.split(',')[0],
+  });
 
-  // Enable graceful stop
+  // bot.launch() never resolves (infinite polling loop) — use onLaunch callback
+  bot.launch({ dropPendingUpdates: true }, () => {
+    console.log('  ✅ Telegram Bridge Online');
+    console.log('  ⏱️  Heartbeat scheduled via Inngest (8:00 AM daily).');
+  }).catch(err => console.error('  ❌ Telegram Bridge error:', err));
+
   process.once('SIGINT', () => bot.stop('SIGINT'));
   process.once('SIGTERM', () => bot.stop('SIGTERM'));
 } else {
-  console.log(`\n  ⚠️ Telegram Bridge inactive: Missing TELEGRAM_BOT_TOKEN or ANTHROPIC_API_KEY in .env`);
+  console.log('\n  ⚠️ Telegram Bridge inactive: Missing TELEGRAM_BOT_TOKEN or GEMINI_API_KEY in .env');
 }
 
-// ── CORS — only allow local dev frontend ──────────────────────────────────────
-app.use(
-  '*',
-  cors({
-    origin: ['http://localhost:5177', 'http://127.0.0.1:5177'],
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
-  }),
-);
+// ── 5. HTTP API ──────────────────────────────────────────────────────────────
+app.use('*', cors({
+  origin: ['http://localhost:5177', 'http://127.0.0.1:5177'],
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+}));
 
-// ── Health ────────────────────────────────────────────────────────────────────
 app.get('/api/health', (c) => {
-  return c.json({ status: 'ok', service: 'gravity-claw-proxy', ts: Date.now() });
+  return c.json({
+    status: 'ok',
+    service: 'gravity-claw',
+    model: DEFAULT_MODEL,
+    tools: geminiFunctionTool?.functionDeclarations.length || 0,
+    ts: Date.now(),
+  });
 });
 
-// ── Chat proxy → Anthropic ────────────────────────────────────────────────────
+app.post('/api/refresh-tools', async (c) => {
+  await refreshMcpTools();
+  return c.json({ status: 'ok', toolCount: geminiFunctionTool?.functionDeclarations.length || 0 });
+});
+
 app.post('/api/chat', async (c) => {
-  let body: { messages?: unknown[]; model?: string; apiKey?: string; system?: string };
+  let body: { messages?: { role: string; content: string }[]; model?: string; apiKey?: string; system?: string };
 
   try {
     body = await c.req.json();
@@ -86,56 +236,68 @@ app.post('/api/chat', async (c) => {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { messages, model = 'claude-sonnet-4-6', apiKey, system } = body;
+  const { messages, model = DEFAULT_MODEL, apiKey, system } = body;
+  const resolvedApiKey = apiKey || process.env.GEMINI_API_KEY;
 
-  if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('sk-ant-')) {
-    return c.json({ error: 'Missing or invalid Anthropic API key. Add it in Settings.' }, 401);
+  if (!resolvedApiKey || typeof resolvedApiKey !== 'string') {
+    return c.json({ error: 'Missing or invalid Gemini API key.' }, 401);
   }
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return c.json({ error: 'messages array is required' }, 400);
   }
 
-  const client = new Anthropic({ apiKey });
+  const genAI = new GoogleGenerativeAI(resolvedApiKey);
 
-  // Streaming response
   return stream(c, async (writer) => {
     try {
-      const response = await client.messages.stream({
+      const generativeModel = genAI.getGenerativeModel({
         model,
-        max_tokens: 4096,
-        system:
-          system ??
-          'You are G-CLAW, an advanced autonomous AI agent assistant. You help users with tasks, answer questions, and demonstrate your capabilities across 34+ skill areas. Be concise, helpful, and a little bit agent-like in tone.',
-        messages: messages as Anthropic.MessageParam[],
+        systemInstruction: system ?? soulContent,
+        tools: geminiFunctionTool ? [geminiFunctionTool] : undefined,
       });
 
-      for await (const chunk of response) {
-        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-          await writer.write(chunk.delta.text);
-        }
-      }
+      const lastMessage = messages[messages.length - 1];
+      const history = messages.slice(0, -1).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }],
+      }));
+
+      const chatSession = generativeModel.startChat({ history });
+      const result = await chatSession.sendMessage(lastMessage.content);
+      const finalReply = await handleFunctionCalls(generativeModel, chatSession, result.response);
+
+      await writer.write(finalReply);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Anthropic API error';
+      const msg = err instanceof Error ? err.message : 'Gemini API error';
       await writer.write(`\n\n[ERROR: ${msg}]`);
     }
   });
 });
 
-// ── Models list ───────────────────────────────────────────────────────────────
 app.get('/api/models', (c) => {
   return c.json({
     models: [
-      { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'anthropic' },
-      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic' },
-      { id: 'claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', provider: 'anthropic' },
+      { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', provider: 'google' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'google' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'google' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'google' },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)', provider: 'google' },
     ],
   });
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-const PORT = Number(process.env.PORT ?? 5178);
+// ── 6. Inngest Serve Endpoint ────────────────────────────────────────────────
+const inngestHandler = serveInngest({
+  client: inngest,
+  functions: allFunctions,
+});
 
+// Mount Inngest on the existing Hono app (GET for dashboard, PUT for sync, POST for invocations)
+app.on(['GET', 'PUT', 'POST'], '/api/inngest', async (c) => inngestHandler(c));
+
+// ── 7. Start Server ──────────────────────────────────────────────────────────
 serve({ fetch: app.fetch, port: PORT }, () => {
-  console.log(`\n  🦀 gravity-claw proxy running\n  ➜  http://localhost:${PORT}\n`);
+  console.log(`\n  🦀 gravity-claw proxy running\n  ➜  http://localhost:${PORT}`);
+  console.log(`  📡 Inngest endpoint: http://localhost:${PORT}/api/inngest\n`);
 });

@@ -8,25 +8,38 @@
     "server": "tsx server/src/index.ts",
     "server:dev": "tsx watch server/src/index.ts",
     "start": "concurrently \"pnpm dev\" \"pnpm server:dev\" --names \"ui,api\" --prefix-colors \"yellow,cyan\"",
-    "build": "tsc && vite build",
+    "start:full": "concurrently \"pnpm dev\" \"pnpm server:dev\" \"pnpm --filter @vibetech/mcp-gateway dev\" \"pnpm inngest:dev\" --names \"ui,api,mcp,inngest\" --prefix-colors \"yellow,cyan,green,magenta\"",
+    "desktop": "electron electron/main.mjs",
+    "desktop:dev": "node scripts/start-desktop-dev.mjs",
+    "build": "pnpm run typecheck && pnpm run typecheck:server && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint src --ext ts,tsx",
-    "self-improve": "powershell -ExecutionPolicy Bypass -File scripts/apply-improvement.ps1"
+    "self-improve": "powershell -ExecutionPolicy Bypass -File scripts/apply-improvement.ps1",
+    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:5178/api/inngest"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.12.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "@google/generative-ai": "^0.24.1",
+    "@hono/node-server": "^1.13.7",
+    "dotenv": "^16.4.7",
+    "hono": "^4.7.7",
+    "inngest": "^3.52.7",
+    "@vibetech/inngest-client": "workspace:*",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "telegraf": "^4.16.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@types/node": "^25.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.1.3",
     "concurrently": "^9.1.2",
+    "electron": "40.1.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "vite": "^6.1.0"
+    "typescript": "5.9.3",
+    "vite": "^7.3.1"
   }
 }
