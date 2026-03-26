@@ -1,4 +1,4 @@
-/* ── Login Screen — Deep Space Terminal ─────────────────────── */
+/* ── Login Screen — Bright Deep Space ─────────────────────────── */
 .login-screen {
   position: fixed;
   inset: 0;
@@ -15,12 +15,12 @@
   position: absolute;
   inset: -50%;
   background-image:
-    linear-gradient(rgba(245,158,11,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245,158,11,0.04) 1px, transparent 1px);
+    linear-gradient(rgba(245,158,11,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245,158,11,0.06) 1px, transparent 1px);
   background-size: 56px 56px;
   transform: perspective(600px) rotateX(45deg);
   transform-origin: center 80%;
-  animation: grid-drift 24s linear infinite;
+  animation: grid-drift 20s linear infinite;
   mask-image: radial-gradient(ellipse 70% 50% at 50% 80%, black 20%, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse 70% 50% at 50% 80%, black 20%, transparent 70%);
 }
@@ -30,35 +30,46 @@
   to { background-position: 56px 56px; }
 }
 
-/* Primary glow orb — amber, centered above card */
+/* Primary glow orb — amber */
 .login-orb {
   position: absolute;
-  top: 30%;
+  top: 25%;
   left: 50%;
-  width: 700px;
-  height: 700px;
+  width: 800px;
+  height: 800px;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, #d97706 0%, #f59e0b08 35%, transparent 65%);
-  opacity: 0.08;
+  background: radial-gradient(circle, rgba(245,158,11,0.14) 0%, rgba(245,158,11,0.04) 30%, transparent 60%);
   pointer-events: none;
   animation: orb-pulse 5s ease-in-out infinite alternate;
 }
 
-/* Secondary orb — cyan accent, offset */
+/* Secondary orb — cyan accent */
 .login-orb::before {
   content: '';
   position: absolute;
   top: 20%;
   right: -30%;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, #22d3ee06 0%, transparent 60%);
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(34,211,238,0.10) 0%, transparent 55%);
   animation: orb-drift 7s ease-in-out infinite alternate-reverse;
 }
 
+/* Tertiary orb — purple */
+.login-orb::after {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  left: -20%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 55%);
+  animation: orb-drift 9s ease-in-out infinite alternate;
+}
+
 @keyframes orb-pulse {
-  from { opacity: 0.06; transform: translate(-50%, -50%) scale(1); }
-  to { opacity: 0.12; transform: translate(-50%, -50%) scale(1.15); }
+  from { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
 }
 
 @keyframes orb-drift {
@@ -75,10 +86,10 @@
     to bottom,
     transparent 0px,
     transparent 2px,
-    rgba(0, 0, 0, 0.04) 2px,
-    rgba(0, 0, 0, 0.04) 4px
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
   );
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 /* Noise grain overlay */
@@ -86,7 +97,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
   pointer-events: none;
   z-index: 0;
 }
@@ -95,34 +106,36 @@
 .login-card {
   position: relative;
   z-index: 2;
-  width: 500px;
-  background: linear-gradient(180deg, rgba(14,14,34,0.92) 0%, rgba(8,8,26,0.96) 100%);
-  border: 1px solid rgba(245,158,11,0.08);
-  border-radius: var(--radius-xl);
-  padding: var(--sp-8) var(--sp-8) var(--sp-6);
+  width: 520px;
+  background: linear-gradient(180deg, rgba(20,20,60,0.93) 0%, rgba(12,12,42,0.96) 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--radius-2xl);
+  padding: var(--sp-10) var(--sp-8) var(--sp-8);
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   box-shadow:
-    0 32px 100px rgba(0,0,0,0.7),
-    0 0 0 1px rgba(245,158,11,0.06),
-    inset 0 1px 0 rgba(255,255,255,0.03);
+    0 32px 100px rgba(0,0,0,0.55),
+    0 0 80px rgba(245,158,11,0.06),
+    0 0 0 1px rgba(255,255,255,0.05),
+    inset 0 1px 0 rgba(255,255,255,0.07);
   animation: card-in 0.7s var(--ease-out) both;
   animation-delay: 0.15s;
 }
 
-/* Gradient top accent */
+/* Multi-color top accent */
 .login-card::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 20%;
-  right: 20%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--amber-dim), transparent);
+  left: 15%;
+  right: 15%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--amber), var(--cyan-dim), transparent);
   border-radius: 1px;
+  opacity: 0.5;
 }
 
 @keyframes card-in {
@@ -148,21 +161,22 @@
 }
 
 .login-logo-icon {
-  font-size: 40px;
-  filter: drop-shadow(0 0 12px rgba(245,158,11,0.3));
+  font-size: 44px;
+  filter: drop-shadow(0 0 16px rgba(245,158,11,0.40));
   animation: icon-glow 3s ease-in-out infinite alternate;
 }
 
 @keyframes icon-glow {
-  from { filter: drop-shadow(0 0 8px rgba(245,158,11,0.2)); }
-  to { filter: drop-shadow(0 0 16px rgba(245,158,11,0.4)); }
+  from { filter: drop-shadow(0 0 10px rgba(245,158,11,0.30)); }
+  to { filter: drop-shadow(0 0 24px rgba(245,158,11,0.50)); }
 }
 
 .login-logo-name {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: 0.14em;
   color: var(--text-primary);
+  text-shadow: 0 0 30px rgba(245,158,11,0.10);
 }
 
 .login-logo-sub {
@@ -175,7 +189,7 @@
 /* ── Divider ── */
 .login-divider {
   height: 1px;
-  background: linear-gradient(to right, transparent, var(--border), var(--border-glow), var(--border), transparent);
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.10), rgba(245,158,11,0.15), rgba(255,255,255,0.10), transparent);
   animation: stagger-in 0.5s var(--ease-out) both;
   animation-delay: 0.5s;
 }
@@ -191,7 +205,7 @@
 
 /* ── Headline ── */
 .login-headline {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 800;
   color: var(--text-primary);
   line-height: 1.2;
@@ -203,20 +217,22 @@
 
 /* ── Auth option card ── */
 .auth-option {
-  background: rgba(21,21,48,0.6);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: var(--radius-lg);
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-5) var(--sp-5);
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   animation: stagger-in 0.5s var(--ease-out) both;
   animation-delay: 0.8s;
-  transition: border-color var(--dur-mid) var(--ease-out);
+  transition: border-color var(--dur-mid) var(--ease-out), background var(--dur-mid) var(--ease-out), box-shadow var(--dur-mid) var(--ease-out);
 }
 
 .auth-option:focus-within {
-  border-color: var(--border-glow);
+  border-color: rgba(245,158,11,0.35);
+  background: rgba(245,158,11,0.04);
+  box-shadow: 0 0 30px rgba(245,158,11,0.06);
 }
 
 .auth-option-label {
@@ -249,7 +265,7 @@
 
 .key-input {
   width: 100%;
-  height: 42px;
+  height: 44px;
   padding: 0 var(--sp-3);
   padding-right: 60px;
   border-radius: var(--radius-md);
@@ -257,13 +273,13 @@
   font-size: 12px;
   letter-spacing: 0.04em;
   box-sizing: border-box;
-  background: rgba(8,8,26,0.6);
+  background: rgba(10,10,30,0.7);
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .key-input:focus {
   border-color: var(--amber);
-  box-shadow: 0 0 0 3px var(--amber-muted), 0 0 20px rgba(245,158,11,0.08);
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.15), 0 0 24px rgba(245,158,11,0.10);
 }
 
 .key-input--error {
@@ -289,9 +305,9 @@
 }
 
 .key-submit-btn {
-  height: 42px;
+  height: 44px;
   white-space: nowrap;
-  padding: 0 var(--sp-5);
+  padding: 0 var(--sp-6);
   letter-spacing: 0.06em;
 }
 
@@ -320,7 +336,7 @@
 .auth-or-line {
   flex: 1;
   height: 1px;
-  background: var(--border);
+  background: rgba(255,255,255,0.08);
 }
 
 /* ── Stagger animation ── */
@@ -356,10 +372,10 @@
   }
 
   .login-headline {
-    font-size: 22px;
+    font-size: 24px;
   }
 
   .login-logo-name {
-    font-size: 18px;
+    font-size: 20px;
   }
 }

@@ -1,4 +1,4 @@
-/* ── Command Palette — Glass Terminal ─────────────────────────── */
+/* ── Command Palette — Bright Glass Terminal ─────────────────── */
 .palette-overlay {
   position: fixed;
   inset: 0;
@@ -7,10 +7,10 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 14vh;
-  background: rgba(3, 3, 8, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  animation: overlay-in 0.1s ease-out;
+  background: rgba(6, 6, 24, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: overlay-in 0.12s ease-out;
 }
 
 @keyframes overlay-in {
@@ -19,30 +19,34 @@
 
 .palette {
   width: min(560px, 92vw);
-  background: linear-gradient(180deg, rgba(14,14,34,0.92) 0%, rgba(8,8,26,0.96) 100%);
-  border: 1px solid rgba(245,158,11,0.08);
-  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(20,20,60,0.94) 0%, rgba(12,12,42,0.97) 100%);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-xl);
   box-shadow:
-    0 32px 80px rgba(0,0,0,0.8),
-    0 0 0 1px rgba(255,255,255,0.03),
-    inset 0 1px 0 rgba(255,255,255,0.04);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+    0 32px 80px rgba(0,0,0,0.65),
+    0 0 0 1px rgba(255,255,255,0.05),
+    0 0 60px rgba(245,158,11,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: palette-enter 0.18s var(--ease-out);
+  animation: palette-enter 0.2s var(--ease-out);
+  position: relative;
 }
 
-/* Top gradient accent */
+/* Multi-color top gradient accent */
 .palette::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--amber-dim), transparent);
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--amber), var(--cyan-dim), var(--purple), transparent);
+  opacity: 0.5;
+  border-radius: 1px;
 }
 
 @keyframes palette-enter {
@@ -58,12 +62,12 @@
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-4) var(--sp-5);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .palette-search-icon {
-  font-size: 16px;
-  color: var(--amber-dim);
+  font-size: 17px;
+  color: var(--amber);
   flex-shrink: 0;
 }
 
@@ -88,16 +92,16 @@
   font-family: var(--font-code);
   font-size: 10px;
   color: var(--text-muted);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  padding: 2px 7px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 2px 8px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 
 /* ── Results ── */
 .palette-results {
-  max-height: 380px;
+  max-height: 400px;
   overflow-y: auto;
   padding: var(--sp-2) 0;
 }
@@ -120,29 +124,32 @@
   cursor: pointer;
   transition:
     background var(--dur-fast) var(--ease-out),
-    padding-left var(--dur-fast) var(--ease-out);
-  border-left: 2px solid transparent;
+    padding-left var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+  border-left: 3px solid transparent;
   margin: 0 var(--sp-2);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .palette-item:hover {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.05);
+  padding-left: calc(var(--sp-5) + 4px);
 }
 
 .palette-item--active {
-  background: var(--amber-muted);
-  border-left-color: var(--amber);
-  border-radius: var(--radius-sm);
+  background: rgba(245,158,11,0.12);
+  border-left-color: var(--amber-bright);
+  box-shadow: inset 0 0 20px rgba(245,158,11,0.05);
 }
 
 .palette-item--active .palette-item-label {
   color: var(--amber-bright);
+  text-shadow: 0 0 10px rgba(245,158,11,0.20);
 }
 
 .palette-item-icon {
-  font-size: 15px;
-  width: 24px;
+  font-size: 16px;
+  width: 26px;
   text-align: center;
   flex-shrink: 0;
 }
@@ -163,9 +170,10 @@
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
-  background: rgba(255,255,255,0.03);
-  padding: 1px 6px;
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
   border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 .palette-empty {
@@ -180,8 +188,8 @@
   display: flex;
   align-items: center;
   gap: var(--sp-5);
-  padding: var(--sp-2) var(--sp-5);
-  border-top: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid rgba(255,255,255,0.08);
   font-family: var(--font-code);
   font-size: 10px;
   color: var(--text-muted);

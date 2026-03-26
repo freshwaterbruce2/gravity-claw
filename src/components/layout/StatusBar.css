@@ -2,15 +2,17 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  height: 30px;
+  height: 32px;
   padding: 0 var(--sp-4);
-  background: var(--bg-void);
+  background: rgba(6,6,24,0.90);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
   position: relative;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-/* Thin gradient line on top edge */
+/* Multi-color gradient line on top */
 .statusbar::before {
   content: '';
   position: absolute;
@@ -18,7 +20,7 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  background: linear-gradient(90deg, transparent, rgba(245,158,11,0.15), rgba(34,211,238,0.10), transparent);
   pointer-events: none;
 }
 
@@ -30,16 +32,22 @@
   font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
+  transition: color var(--dur-fast);
+}
+
+.statusbar-item:hover {
+  color: var(--text-secondary);
 }
 
 .statusbar-value {
   font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .statusbar-sep {
   width: 1px;
-  height: 12px;
-  background: var(--border);
+  height: 14px;
+  background: rgba(255,255,255,0.08);
   flex-shrink: 0;
 }
 

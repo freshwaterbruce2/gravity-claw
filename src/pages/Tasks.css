@@ -20,15 +20,16 @@
   gap: var(--sp-3);
   align-items: center;
   padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-active);
+  background: rgba(20,20,60,0.70);
+  border: 1px solid rgba(245,158,11,0.25);
   border-radius: var(--radius-lg);
   flex-shrink: 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.20);
 }
 
 .add-task-input {
   flex: 1;
-  height: 36px;
+  height: 38px;
   padding: 0 var(--sp-3);
   border-radius: var(--radius-md);
 }
@@ -45,10 +46,15 @@
 .kanban-col {
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(16,16,52,0.65) 0%, rgba(14,14,45,0.70) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  transition: border-color var(--dur-mid) var(--ease-out);
+}
+
+.kanban-col:hover {
+  border-color: rgba(255,255,255,0.12);
 }
 
 .kanban-col-header {
@@ -56,9 +62,9 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
-  background: var(--bg-elevated);
+  background: rgba(255,255,255,0.03);
 }
 
 .col-icon {
@@ -78,12 +84,13 @@
   text-align: center;
   padding: var(--sp-6) var(--sp-4);
   letter-spacing: 0.06em;
+  color: var(--text-muted);
 }
 
 /* Task Cards */
 .task-card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  background: rgba(22,22,60,0.75);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-md);
   padding: var(--sp-4);
   display: flex;
@@ -92,14 +99,16 @@
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
   animation: fade-in 0.3s var(--ease-out) both;
 }
 
 .task-card:hover {
-  border-color: var(--border-glow);
-  box-shadow: 0 6px 20px #00000040;
-  transform: translateY(-1px);
+  border-color: rgba(245,158,11,0.22);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.30);
+  transform: translateY(-2px);
+  background: rgba(28,28,72,0.80);
 }
 
 .task-card-header {
@@ -109,8 +118,8 @@
 }
 
 .task-remove-btn {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
@@ -121,11 +130,13 @@
   cursor: pointer;
   transition:
     background var(--dur-fast),
-    color var(--dur-fast);
+    color var(--dur-fast),
+    transform var(--dur-fast);
 }
 .task-remove-btn:hover {
   background: var(--red-muted);
   color: var(--red);
+  transform: scale(1.1);
 }
 
 .task-title {
@@ -138,6 +149,7 @@
 .task-desc {
   font-size: var(--text-xs);
   line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .task-skill-row {
