@@ -828,6 +828,7 @@ interface OpenAIToolCall {
 interface OpenAIMessage {
   role: string;
   content: string | null;
+  reasoning_content?: string | null;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
 }
@@ -897,7 +898,7 @@ async function handleKimiChat(
     }
 
     const data = await res.json() as {
-      choices?: { message?: OpenAIMessage; finish_reason?: string }[];
+      choices?: { message?: OpenAIMessage & { reasoning_content?: string }; finish_reason?: string }[];
     };
     const choice = data.choices?.[0];
     const assistantMsg = choice?.message;
@@ -910,11 +911,16 @@ async function handleKimiChat(
     // If the model wants to call tools
     if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
       // Push the assistant message (with tool_calls) into history
-      openaiMessages.push({
+      // Kimi thinking models require reasoning_content to be preserved
+      const assistantHistoryMsg: OpenAIMessage = {
         role: 'assistant',
         content: assistantMsg.content ?? '',
         tool_calls: assistantMsg.tool_calls,
-      });
+      };
+      if (assistantMsg.reasoning_content) {
+        assistantHistoryMsg.reasoning_content = assistantMsg.reasoning_content;
+      }
+      openaiMessages.push(assistantHistoryMsg);
 
       // Stream partial text if the model returned any alongside tool calls
       if (assistantMsg.content) {
