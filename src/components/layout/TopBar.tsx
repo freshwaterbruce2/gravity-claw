@@ -1,3 +1,4 @@
+import SystemVitals from '../widgets/SystemVitals';
 import { useAgentStore } from '../../stores/agentStore';
 import { useTaskStore } from '../../stores/taskStore';
 import './TopBar.css';
@@ -26,6 +27,8 @@ export default function TopBar({ currentPage }: { currentPage: Page }) {
       </div>
 
       <div className="topbar-right">
+        <SystemVitals />
+        <div className="topbar-divider" />
         <div className="topbar-stat">
           <span className="topbar-stat-label">MODEL</span>
           <span className="topbar-stat-value">{model}</span>

@@ -1,5 +1,5 @@
 .topbar {
-  height: 52px;
+  height: 54px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7,6 +7,19 @@
   border-bottom: 1px solid var(--border);
   background: var(--bg-base);
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Thin gradient accent line at bottom */
+.topbar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--amber-muted) 20%, var(--amber-muted) 80%, transparent 100%);
+  pointer-events: none;
 }
 
 .topbar-left {
@@ -18,13 +31,14 @@
 .topbar-tag {
   color: var(--amber);
   font-size: 18px;
+  animation: glow-breathe 3s ease-in-out infinite;
 }
 
 .topbar-title {
   font-family: var(--font-code);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   color: var(--text-primary);
 }
 
@@ -37,7 +51,7 @@
 .topbar-stat {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   align-items: flex-end;
 }
 
@@ -45,7 +59,7 @@
   font-family: var(--font-code);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--text-muted);
 }
 
@@ -58,8 +72,8 @@
 
 .topbar-divider {
   width: 1px;
-  height: 24px;
-  background: var(--border);
+  height: 26px;
+  background: linear-gradient(180deg, transparent, var(--border), transparent);
 }
 
 .topbar-dot-group {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTaskStore, type Task, type TaskStatus } from '../stores/taskStore';
 import './Tasks.css';
 
@@ -16,13 +16,17 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function Tasks() {
-  const { tasks, moveTask, addTask, removeTask } = useTaskStore();
+  const { tasks, moveTask, addTask, removeTask, loadTasks } = useTaskStore();
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
 
+  useEffect(() => {
+    void loadTasks();
+  }, [loadTasks]);
+
   const handleAdd = () => {
     if (!newTitle.trim()) return;
-    addTask({
+    void addTask({
       title: newTitle.trim(),
       skill: 'Task Planner',
       priority: 'medium',
@@ -109,8 +113,8 @@ function TaskCard({
   onRemove,
 }: {
   task: Task;
-  onMove: (id: string, s: TaskStatus) => void;
-  onRemove: (id: string) => void;
+  onMove: (id: string, s: TaskStatus) => Promise<void> | void;
+  onRemove: (id: string) => Promise<void> | void;
 }) {
   return (
     <div className="task-card">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatUptime, useAgentStore } from '../../stores/agentStore';
+import { useSkillsStore } from '../../stores/skillsStore';
 import './Sidebar.css';
 
 type Page = 'dashboard' | 'chat' | 'skills' | 'tasks' | 'console' | 'settings';
@@ -20,6 +21,7 @@ const NAV_ITEMS: { id: Page; icon: string; label: string }[] = [
 
 export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const { status, name, uptime, skillCount } = useAgentStore();
+  const liveSkillCount = useSkillsStore((state) => state.skills.length);
   const [uptimeDisplay, setUptimeDisplay] = useState(formatUptime(uptime));
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         </div>
         <div className="agent-meta font-code text-xs text-muted">
           <span>⏱ {uptimeDisplay}</span>
-          <span>⬡ {skillCount} skills</span>
+          <span>⬡ {liveSkillCount || skillCount} skills</span>
         </div>
       </div>
 

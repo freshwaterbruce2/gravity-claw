@@ -12,10 +12,26 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  position: relative;
+}
+
+/* Subtle ambient glow in the top-left of the content area */
+.app-main::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  left: -80px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #f59e0b06 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .app-content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  position: relative;
+  z-index: 1;
 }

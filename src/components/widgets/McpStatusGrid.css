@@ -1,0 +1,68 @@
+.mcp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.mcp-empty {
+  padding: var(--sp-4);
+  text-align: center;
+  font-size: var(--text-xs);
+}
+
+.mcp-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.mcp-tool-summary {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--sp-2);
+}
+
+.mcp-server-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  border-left: 2px solid transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.mcp-server-row--green {
+  border-left-color: var(--green);
+}
+.mcp-server-row--amber {
+  border-left-color: var(--amber);
+}
+.mcp-server-row--red {
+  border-left-color: var(--red);
+}
+
+.mcp-server-row:hover {
+  background: var(--bg-hover);
+}
+
+.mcp-server-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-server-tools {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.mcp-server-latency {
+  font-size: 10px;
+  flex-shrink: 0;
+  min-width: 48px;
+  text-align: right;
+}

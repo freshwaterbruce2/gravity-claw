@@ -1,21 +1,32 @@
-import { useState } from 'react';
-import type { Skill } from '../data/skills';
-import { SKILLS, SKILL_CATEGORIES } from '../data/skills';
+import { useEffect, useMemo, useState } from 'react';
+import { getSkillCategories, useSkillsStore, type Skill } from '../stores/skillsStore';
 import './Skills.css';
 
 export default function Skills() {
+  const { skills, hydrated, loadSkills } = useSkillsStore();
   const [activeCategory, setActiveCategory] = useState('All');
   const [query, setQuery] = useState('');
 
-  const filtered = SKILLS.filter((s) => {
-    const matchCat = activeCategory === 'All' || s.category === activeCategory;
-    const matchQ =
-      !query ||
-      s.name.toLowerCase().includes(query.toLowerCase()) ||
-      s.description.toLowerCase().includes(query.toLowerCase()) ||
-      s.tags.some((t) => t.includes(query.toLowerCase()));
-    return matchCat && matchQ;
-  });
+  useEffect(() => {
+    void loadSkills();
+  }, [loadSkills]);
+
+  const categories = useMemo(() => getSkillCategories(skills), [skills]);
+
+  const filtered = useMemo(
+    () =>
+      skills.filter((s) => {
+        const matchCat = activeCategory === 'All' || s.category === activeCategory;
+        const queryValue = query.toLowerCase();
+        const matchQ =
+          !queryValue ||
+          s.name.toLowerCase().includes(queryValue) ||
+          s.description.toLowerCase().includes(queryValue) ||
+          s.tags.some((tag) => tag.toLowerCase().includes(queryValue));
+        return matchCat && matchQ;
+      }),
+    [activeCategory, query, skills]
+  );
 
   return (
     <div className="skills-page animate-in">
@@ -24,8 +35,9 @@ export default function Skills() {
         <div>
           <h3 style={{ color: 'var(--text-primary)', marginBottom: 4 }}>Skill Browser</h3>
           <p className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
-            {SKILLS.length} skills available — {SKILLS.filter((s) => s.status === 'active').length}{' '}
-            active
+            {!hydrated
+              ? 'Syncing live skill inventory...'
+              : `${skills.length} skills available — ${skills.filter((s) => s.status === 'active').length} active`}
           </p>
         </div>
         <input
@@ -38,7 +50,7 @@ export default function Skills() {
 
       {/* Category tabs */}
       <div className="category-tabs">
-        {SKILL_CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <button
             key={cat}
             className={`category-tab ${activeCategory === cat ? 'category-tab--active' : ''}`}
@@ -47,7 +59,7 @@ export default function Skills() {
             {cat}
             {cat !== 'All' && (
               <span className="category-count">
-                {SKILLS.filter((s) => s.category === cat).length}
+                {skills.filter((s) => s.category === cat).length}
               </span>
             )}
           </button>

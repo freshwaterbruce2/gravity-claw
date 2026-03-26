@@ -1,146 +1,169 @@
 import { create } from 'zustand';
+import {
+  createTask as createTaskOnServer,
+  fetchTasks,
+  normalizeTask,
+  saveTasks,
+  updateTaskOnServer,
+  type LiveTask,
+  type LiveTaskPriority,
+  type LiveTaskStatus,
+} from '../lib/liveApi';
 
-export type TaskStatus = 'backlog' | 'running' | 'done';
-export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
-
-export interface Task {
-  id: string;
-  title: string;
-  skill: string;
-  priority: TaskPriority;
-  status: TaskStatus;
-  progress: number; // 0-100
-  createdAt: Date;
-  startedAt?: Date;
-  completedAt?: Date;
-  description?: string;
-}
+export type TaskStatus = LiveTaskStatus;
+export type TaskPriority = LiveTaskPriority;
+export type Task = LiveTask;
 
 interface TaskState {
   tasks: Task[];
-  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
-  moveTask: (id: string, status: TaskStatus) => void;
-  updateProgress: (id: string, progress: number) => void;
-  removeTask: (id: string) => void;
+  hydrated: boolean;
+  lastUpdated: number;
+  loadTasks: (options?: { force?: boolean }) => Promise<void>;
+  replaceTasks: (tasks: Task[], options?: { sync?: boolean }) => Promise<void>;
+  upsertTask: (task: Task, options?: { sync?: boolean }) => Promise<void>;
+  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
+  moveTask: (id: string, status: TaskStatus, options?: { sync?: boolean }) => Promise<void>;
+  updateProgress: (
+    id: string,
+    progress: number,
+    options?: { sync?: boolean },
+  ) => Promise<void>;
+  removeTask: (id: string, options?: { sync?: boolean }) => Promise<void>;
 }
 
-const SEED_TASKS: Task[] = [
-  {
-    id: 't1',
-    title: 'Monitor competitor pricing daily',
-    skill: 'Web Scraper',
-    priority: 'high',
-    status: 'running',
-    progress: 65,
-    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
-    startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    description: 'Scrape prices from 5 competitor sites and notify on changes > 10%',
-  },
-  {
-    id: 't2',
-    title: 'Weekly newsletter draft',
-    skill: 'Content Writer',
-    priority: 'high',
-    status: 'running',
-    progress: 30,
-    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-    startedAt: new Date(Date.now() - 30 * 60 * 1000),
-  },
-  {
-    id: 't3',
-    title: 'Organize /Downloads folder',
-    skill: 'Folder Organizer',
-    priority: 'medium',
-    status: 'backlog',
-    progress: 0,
-    createdAt: new Date(Date.now() - 30 * 60 * 1000),
-  },
-  {
-    id: 't4',
-    title: 'Generate unit tests for auth module',
-    skill: 'Test Writer',
-    priority: 'medium',
-    status: 'backlog',
-    progress: 0,
-    createdAt: new Date(Date.now() - 15 * 60 * 1000),
-  },
-  {
-    id: 't5',
-    title: 'Research LLM benchmarks 2026',
-    skill: 'Deep Researcher',
-    priority: 'low',
-    status: 'backlog',
-    progress: 0,
-    createdAt: new Date(Date.now() - 10 * 60 * 1000),
-  },
-  {
-    id: 't6',
-    title: 'Email digest — AI news summary',
-    skill: 'Email Manager',
-    priority: 'medium',
-    status: 'done',
-    progress: 100,
-    createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
-    startedAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
-    completedAt: new Date(Date.now() - 3.5 * 60 * 60 * 1000),
-  },
-  {
-    id: 't7',
-    title: 'Calendar: Schedule 1:1s for March',
-    skill: 'Calendar Manager',
-    priority: 'high',
-    status: 'done',
-    progress: 100,
-    createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
-    startedAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
-    completedAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
-  },
-  {
-    id: 't8',
-    title: 'Fix TypeScript errors in api.ts',
-    skill: 'Code Debugger',
-    priority: 'critical',
-    status: 'done',
-    progress: 100,
-    createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
-    startedAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
-    completedAt: new Date(Date.now() - 7 * 60 * 60 * 1000),
-  },
-];
+function generateTaskId(): string {
+  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+}
 
-export const useTaskStore = create<TaskState>((set) => ({
-  tasks: SEED_TASKS,
+function normalizeTaskCollection(tasks: Task[]): Task[] {
+  return tasks.map((task) => normalizeTask(task));
+}
 
-  addTask: (task) =>
-    set((s) => ({
-      tasks: [
-        {
-          ...task,
-          id: `task-${Date.now()}`,
+export const useTaskStore = create<TaskState>((set, get) => {
+  const commitTasks = async (nextTasks: Task[], sync = false) => {
+    const normalized = normalizeTaskCollection(nextTasks);
+    set({
+      tasks: normalized,
+      hydrated: true,
+      lastUpdated: Date.now(),
+    });
+
+    if (sync) {
+      const saved = await saveTasks(normalized);
+      if (saved.length > 0) {
+        set({
+          tasks: normalizeTaskCollection(saved),
+          hydrated: true,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  };
+
+  return {
+    tasks: [],
+    hydrated: false,
+    lastUpdated: 0,
+
+    loadTasks: async (options) => {
+      if (get().hydrated && !options?.force) {
+        return;
+      }
+
+      try {
+        const tasks = await fetchTasks();
+        set({
+          tasks: normalizeTaskCollection(tasks),
+          hydrated: true,
+          lastUpdated: Date.now(),
+        });
+      } catch {
+        set({ hydrated: true, lastUpdated: Date.now() });
+      }
+    },
+
+    replaceTasks: async (tasks, options) => {
+      await commitTasks(tasks, Boolean(options?.sync));
+    },
+
+    upsertTask: async (task, options) => {
+      const current = get().tasks;
+      const next = current.some((item) => item.id === task.id)
+        ? current.map((item) => (item.id === task.id ? task : item))
+        : [task, ...current];
+      await commitTasks(next, Boolean(options?.sync));
+    },
+
+    addTask: async (taskInput) => {
+      const created = await createTaskOnServer(
+        normalizeTask({
+          ...taskInput,
+          id: generateTaskId(),
           createdAt: new Date(),
-        },
-        ...s.tasks,
-      ],
-    })),
+        }),
+      );
 
-  moveTask: (id, status) =>
-    set((s) => ({
-      tasks: s.tasks.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              status,
-              ...(status === 'running' ? { startedAt: new Date(), progress: 0 } : {}),
-              ...(status === 'done' ? { completedAt: new Date(), progress: 100 } : {}),
-            }
-          : t,
-      ),
-    })),
+      if (created) {
+        await commitTasks([created, ...get().tasks.filter((task) => task.id !== created.id)], false);
+        return;
+      }
 
-  updateProgress: (id, progress) =>
-    set((s) => ({
-      tasks: s.tasks.map((t) => (t.id === id ? { ...t, progress } : t)),
-    })),
+      await commitTasks(
+        [
+          normalizeTask({
+            ...taskInput,
+            id: generateTaskId(),
+            createdAt: new Date(),
+          }),
+          ...get().tasks,
+        ],
+        false,
+      );
+    },
 
-  removeTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
-}));
+    moveTask: async (id, status, options) => {
+      const current = get().tasks.find((task) => task.id === id);
+      if (!current) {
+        return;
+      }
+
+      const nextTask = normalizeTask({
+        ...current,
+        status,
+        ...(status === 'running' ? { startedAt: current.startedAt ?? new Date(), progress: 0 } : {}),
+        ...(status === 'done' ? { completedAt: new Date(), progress: 100 } : {}),
+      });
+
+      const sync = options?.sync ?? true;
+      const persisted = sync
+        ? await updateTaskOnServer(id, {
+            status: nextTask.status,
+            progress: nextTask.progress,
+          })
+        : null;
+
+      const taskToUse = persisted ?? nextTask;
+      const next = get().tasks.map((task) => (task.id === id ? taskToUse : task));
+      await commitTasks(next, false);
+    },
+
+    updateProgress: async (id, progress, options) => {
+      const current = get().tasks.find((task) => task.id === id);
+      if (!current) {
+        return;
+      }
+
+      const nextTask = normalizeTask({ ...current, progress });
+      const sync = options?.sync ?? true;
+      const persisted = sync ? await updateTaskOnServer(id, { progress: nextTask.progress }) : null;
+      const taskToUse = persisted ?? nextTask;
+      const next = get().tasks.map((task) => (task.id === id ? taskToUse : task));
+      await commitTasks(next, false);
+    },
+
+    removeTask: async (id, options) => {
+      const next = get().tasks.filter((task) => task.id !== id);
+      await commitTasks(next, options?.sync ?? true);
+    },
+  };
+});

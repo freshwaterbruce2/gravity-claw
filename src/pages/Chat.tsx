@@ -6,8 +6,8 @@ import './Chat.css';
 
 export default function Chat() {
   const { messages, isTyping, sendMessage, clearMessages } = useChatStore();
-  const { incrementMessages, addActivity, setStatus } = useAgentStore();
-  const { anthropicKey } = useAuthStore();
+  const { incrementMessages, addActivity, model, setStatus } = useAgentStore();
+  const { geminiKey, kimiKey } = useAuthStore();
   const [input, setInput] = useState('');
   const [showCommands, setShowCommands] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -30,7 +30,7 @@ export default function Chat() {
     });
     setStatus('busy');
 
-    await sendMessage(text, anthropicKey ?? '');
+    await sendMessage(text, geminiKey ?? '', model, kimiKey ?? undefined);
 
     setStatus('online');
   };
@@ -38,7 +38,7 @@ export default function Chat() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
     if (e.key === 'Escape') setShowCommands(false);
   };
@@ -55,16 +55,19 @@ export default function Chat() {
     inputRef.current?.focus();
   };
 
-  // Banner: warn if no API key and not google auth
-  const { method } = useAuthStore();
-  const needsKey = method === 'google' && !anthropicKey;
+  const isKimiModel = model.startsWith('kimi-');
+  const needsKey = isKimiModel ? !kimiKey : !geminiKey;
+  const handleClearMessages = () => clearMessages();
+  const handleSendClick = () => {
+    void handleSend();
+  };
 
   return (
     <div className="chat-page">
       {/* No-key warning */}
       {needsKey && (
         <div className="chat-banner animate-in">
-          ⚠️ No Anthropic API key configured. Go to <strong>Settings → API Keys</strong> to add one.
+          ⚠️ No {isKimiModel ? 'Kimi' : 'Gemini'} API key configured. Go to <strong>Settings → Authentication</strong> to add one.
         </div>
       )}
 
@@ -120,11 +123,14 @@ export default function Chat() {
 
       {/* Input Bar */}
       <div className="chat-input-bar">
-        <button className="btn btn-ghost chat-clear-btn" onClick={clearMessages} title="Clear chat">
+        <button className="btn btn-ghost chat-clear-btn" onClick={handleClearMessages} title="Clear chat">
           ✕
         </button>
         <input
           ref={inputRef}
+          id="chatMessageInput"
+          type="text"
+          aria-label="Chat message input"
           className="chat-input"
           placeholder={
             needsKey
@@ -138,7 +144,7 @@ export default function Chat() {
         />
         <button
           className="btn btn-primary chat-send-btn"
-          onClick={handleSend}
+          onClick={handleSendClick}
           disabled={!input.trim() || isTyping || needsKey}
         >
           SEND ▶

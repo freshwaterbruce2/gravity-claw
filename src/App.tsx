@@ -1,9 +1,12 @@
-import { GoogleOAuthProvider } from '@react-oauth/google';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import LoginScreen from './components/auth/LoginScreen';
+import CommandPalette from './components/CommandPalette';
 import Sidebar from './components/layout/Sidebar';
+import StatusBar from './components/layout/StatusBar';
 import TopBar from './components/layout/TopBar';
+import { useEventStream } from './hooks/useEventStream';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import Chat from './pages/Chat';
 import Console from './pages/Console';
 import Dashboard from './pages/Dashboard';
@@ -12,67 +15,35 @@ import Skills from './pages/Skills';
 import Tasks from './pages/Tasks';
 import { useAgentStore } from './stores/agentStore';
 import { useAuthStore } from './stores/authStore';
+import { useChatStore } from './stores/chatStore';
 
 export type Page = 'dashboard' | 'chat' | 'skills' | 'tasks' | 'console' | 'settings';
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
-
 export default function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { initializeAuth, isAuthenticated, isHydrated } = useAuthStore();
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
-  const { tick, addActivity } = useAgentStore();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const { tick, initializeConfig } = useAgentStore();
+  const { initializeChat } = useChatStore();
 
-  // Uptime ticker
+  // Connect to backend SSE stream — routes events to Zustand stores
+  const { connectionStatus } = useEventStream();
+
+  // Global keyboard shortcuts (Ctrl+K, 1-6, Ctrl+/)
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  useKeyboardShortcuts({ onOpenPalette: openPalette, onNavigate: setCurrentPage });
+
+  useEffect(() => {
+    void initializeAuth();
+    void initializeConfig();
+    void initializeChat();
+  }, [initializeAuth, initializeChat, initializeConfig]);
+
+  // Uptime ticker (local display counter — real uptime comes from system.metrics SSE)
   useEffect(() => {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [tick]);
-
-  // Simulated live activity events
-  useEffect(() => {
-    const LIVE_EVENTS = [
-      {
-        type: 'skill' as const,
-        message: 'Web Search: monitoring keyword alerts',
-        skill: 'Web Search',
-      },
-      {
-        type: 'message' as const,
-        message: 'Incoming message via Discord bridge',
-        skill: 'Discord Bridge',
-      },
-      { type: 'task' as const, message: 'Reminder: Check market prices', skill: 'Market Watcher' },
-      {
-        type: 'skill' as const,
-        message: 'File Writer: Updated task_log.json',
-        skill: 'File Writer',
-      },
-      { type: 'system' as const, message: 'Memory checkpoint saved', skill: undefined },
-      {
-        type: 'skill' as const,
-        message: 'Browser Control: Navigated to competitor site',
-        skill: 'Browser Control',
-      },
-      {
-        type: 'task' as const,
-        message: 'Email draft generated and queued',
-        skill: 'Email Manager',
-      },
-      {
-        type: 'skill' as const,
-        message: 'Git Manager: Pushed 3 commits to main',
-        skill: 'Git Manager',
-      },
-    ];
-
-    let i = 0;
-    const interval = setInterval(() => {
-      addActivity(LIVE_EVENTS[i % LIVE_EVENTS.length]);
-      i++;
-    }, 8000);
-
-    return () => clearInterval(interval);
-  }, [addActivity]);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -91,19 +62,39 @@ export default function App() {
     }
   };
 
-  return (
-    <GoogleOAuthProvider clientId={CLIENT_ID}>
-      {!isAuthenticated ? (
-        <LoginScreen />
-      ) : (
-        <div className="app-shell">
-          <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
-          <div className="app-main">
-            <TopBar currentPage={currentPage} />
-            <main className="app-content">{renderPage()}</main>
+  if (!isHydrated) {
+    return (
+      <div className="login-screen">
+        <div className="login-card">
+          <div className="login-logo">
+            <span className="login-logo-icon">🦀</span>
+            <div>
+              <div className="login-logo-name">GRAVITY-CLAW</div>
+              <div className="login-logo-sub font-code">INITIALIZING SESSION BRIDGE</div>
+            </div>
           </div>
         </div>
-      )}
-    </GoogleOAuthProvider>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
+
+  return (
+    <div className="app-shell">
+      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <div className="app-main">
+        <TopBar currentPage={currentPage} />
+        <main className="app-content">{renderPage()}</main>
+        <StatusBar connectionStatus={connectionStatus} />
+      </div>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={setCurrentPage}
+      />
+    </div>
   );
 }

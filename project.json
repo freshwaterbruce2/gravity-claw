@@ -1,0 +1,110 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "gravity-claw",
+  "projectType": "application",
+  "root": "apps/gravity-claw",
+  "sourceRoot": "apps/gravity-claw/src",
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm run dev",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "server": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm run server",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "server:dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm run server:dev",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm run start",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "start:full": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "pnpm run start:full",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "desktop": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "pnpm run desktop",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "desktop:dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm run desktop:dev",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist"],
+      "cache": true,
+      "options": {
+        "command": "pnpm run build",
+        "cwd": "apps/gravity-claw"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "pnpm run typecheck",
+        "cwd": "apps/gravity-claw"
+      }
+    },
+    "typecheck:server": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "pnpm run typecheck:server",
+        "cwd": "apps/gravity-claw"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "pnpm run lint",
+        "cwd": "apps/gravity-claw"
+      }
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "pnpm run preview",
+        "cwd": "apps/gravity-claw"
+      },
+      "cache": false
+    }
+  },
+  "tags": ["scope:gravity", "type:application", "platform:desktop"]
+}

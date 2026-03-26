@@ -1,0 +1,10 @@
+{
+  "gravityMechanicEnabled": true,
+  "beeMemoryEnabled": true,
+  "selfImprovementEnabled": true,
+  "vectorMemoryEnabled": false,
+  "directShellEnabled": true,
+  "workspaceWatchersEnabled": false,
+  "gitPipelineEnabled": true,
+  "oauthLoopholeEmail": "bruceybabybot@gmail.com"
+}

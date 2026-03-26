@@ -1,0 +1,25 @@
+{
+  "model": "gemini-3.1-pro-preview",
+  "gravityMechanicEnabled": true,
+  "memoryEnabled": true,
+  "beeMemoryEnabled": true,
+  "selfImprovementEnabled": true,
+  "vectorMemoryEnabled": false,
+  "directShellEnabled": true,
+  "workspaceWatchersEnabled": false,
+  "gitPipelineEnabled": true,
+  "oauthLoopholeEmail": "bruceybabybot@gmail.com",
+  "platforms": {
+    "telegram": true,
+    "discord": true,
+    "whatsapp": true,
+    "slack": false,
+    "email": true,
+    "signal": false
+  },
+  "skillEngine": {
+    "maxConcurrentSkills": 3,
+    "skillTimeoutSeconds": 60,
+    "webSearchMaxResults": 10
+  }
+}

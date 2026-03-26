@@ -184,7 +184,7 @@
   background: var(--border);
 }
 
-/* Anthropic key input */
+/* Gemini key input */
 .key-input-row {
   display: flex;
   gap: var(--sp-2);
