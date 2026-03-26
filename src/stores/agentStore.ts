@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  getRuntimeConfig,
+  type GravityClawPlatformConfig,
+  type GravityClawRuntimeConfig,
+  type GravityClawSkillEngineConfig,
+} from '../lib/runtimeConfig';
 
 export type AgentStatus = 'online' | 'idle' | 'busy' | 'offline';
 
@@ -8,6 +15,18 @@ export interface ActivityItem {
   message: string;
   timestamp: Date;
   skill?: string;
+}
+
+interface ActivitySeed {
+  id?: string;
+  type?: string;
+  message?: string;
+  tool?: string;
+  server?: string;
+  skill?: string;
+  durationMs?: number;
+  ts?: number;
+  timestamp?: string | number | Date;
 }
 
 interface AgentState {
@@ -23,77 +42,123 @@ interface AgentState {
   gravityMechanicEnabled: boolean;
   beeMemoryEnabled: boolean;
   selfImprovementEnabled: boolean;
+  vectorMemoryEnabled: boolean;
+  directShellEnabled: boolean;
+  workspaceWatchersEnabled: boolean;
+  gitPipelineEnabled: boolean;
   oauthLoopholeEmail: string;
+  platforms: GravityClawPlatformConfig;
+  skillEngine: GravityClawSkillEngineConfig;
+  configHydrated: boolean;
   activities: ActivityItem[];
 
   // Actions
+  initializeConfig: () => Promise<void>;
   setStatus: (status: AgentStatus) => void;
+  setModel: (model: string) => void;
   setActiveTask: (task: string | null) => void;
+  setCounts: (counts: Partial<Pick<AgentState, 'taskCount' | 'skillCount' | 'messageCount'>>) => void;
   incrementMessages: () => void;
   addActivity: (item: Omit<ActivityItem, 'id' | 'timestamp'>) => void;
+  replaceActivities: (items: ActivitySeed[]) => void;
   tick: () => void;
-  updateMechanics: (mechanics: Partial<Pick<AgentState, 'gravityMechanicEnabled' | 'beeMemoryEnabled' | 'selfImprovementEnabled' | 'oauthLoopholeEmail'>>) => void;
+  applyRuntimeConfig: (config: GravityClawRuntimeConfig) => void;
+  updateMechanics: (mechanics: Partial<GravityClawRuntimeConfig>) => void;
 }
 
-const SEED_ACTIVITIES: Omit<ActivityItem, 'id' | 'timestamp'>[] = [
-  { type: 'system', message: 'Gravity-Claw agent initialized', skill: undefined },
-  { type: 'skill', message: 'Web Search: \"latest AI news\" — 10 results', skill: 'Web Search' },
-  { type: 'task', message: 'Task complete: Weekly email digest sent', skill: 'Email Manager' },
-  { type: 'skill', message: 'File Reader: Processed project-report.pdf', skill: 'File Reader' },
-  { type: 'message', message: 'User message received via Telegram', skill: 'Telegram Bridge' },
-  {
-    type: 'task',
-    message: 'Reminder triggered: Stand-up meeting in 10 min',
-    skill: 'Reminder Bot',
-  },
-  {
-    type: 'skill',
-    message: 'Calendar: Created event "Product Demo" for tomorrow',
-    skill: 'Calendar Manager',
-  },
-  {
-    type: 'skill',
-    message: 'Code Writer: Generated TypeScript utility function',
-    skill: 'Code Writer',
-  },
-];
+function normalizeActivity(item: ActivitySeed): ActivityItem {
+  const type =
+    item.type === 'task' ||
+    item.type === 'skill' ||
+    item.type === 'error' ||
+    item.type === 'message' ||
+    item.type === 'system'
+      ? item.type
+      : item.type === 'tool_call'
+        ? 'skill'
+        : 'system';
 
-let seedTime = Date.now() - 8 * 60 * 1000;
+  const timestampSource = item.timestamp ?? item.ts;
+  const timestamp =
+    timestampSource instanceof Date
+      ? timestampSource
+      : timestampSource
+        ? new Date(timestampSource)
+        : new Date();
+
+  return {
+    id: item.id ?? `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type,
+    message:
+      item.message ??
+      (item.type === 'tool_call'
+        ? `Tool: ${item.tool ?? 'unknown'} (${item.durationMs ?? 0}ms)`
+        : 'Activity event'),
+    timestamp,
+    skill: item.skill ?? item.server,
+  };
+}
 
 export const useAgentStore = create<AgentState>((set) => ({
   name: 'G-CLAW-01',
-  model: 'claude-sonnet-4-6',
+  model: DEFAULT_RUNTIME_CONFIG.model,
   status: 'online',
-  uptime: 14400 + Math.floor(Math.random() * 3600),
-  messageCount: 247,
-  taskCount: 34,
+  uptime: 0,
+  messageCount: 0,
+  taskCount: 0,
   activeTask: null,
-  skillCount: 34,
-  memoryEnabled: true,
-  gravityMechanicEnabled: true,
-  beeMemoryEnabled: true,
-  selfImprovementEnabled: true,
-  oauthLoopholeEmail: 'bruceybabybot@gmail.com',
+  skillCount: 0,
+  memoryEnabled: DEFAULT_RUNTIME_CONFIG.memoryEnabled,
+  gravityMechanicEnabled: DEFAULT_RUNTIME_CONFIG.gravityMechanicEnabled,
+  beeMemoryEnabled: DEFAULT_RUNTIME_CONFIG.beeMemoryEnabled,
+  selfImprovementEnabled: DEFAULT_RUNTIME_CONFIG.selfImprovementEnabled,
+  vectorMemoryEnabled: DEFAULT_RUNTIME_CONFIG.vectorMemoryEnabled,
+  directShellEnabled: DEFAULT_RUNTIME_CONFIG.directShellEnabled,
+  workspaceWatchersEnabled: DEFAULT_RUNTIME_CONFIG.workspaceWatchersEnabled,
+  gitPipelineEnabled: DEFAULT_RUNTIME_CONFIG.gitPipelineEnabled,
+  oauthLoopholeEmail: DEFAULT_RUNTIME_CONFIG.oauthLoopholeEmail,
+  platforms: DEFAULT_RUNTIME_CONFIG.platforms,
+  skillEngine: DEFAULT_RUNTIME_CONFIG.skillEngine,
+  configHydrated: false,
 
-  activities: SEED_ACTIVITIES.map((a, i) => ({
-    ...a,
-    id: `seed-${i}`,
-    timestamp: new Date(seedTime + i * 75000),
-  })).reverse(),
+  activities: [],
+
+  initializeConfig: async () => {
+    try {
+      const config = await getRuntimeConfig();
+      set({
+        ...config,
+        configHydrated: true,
+      });
+    } catch {
+      set({ configHydrated: true });
+    }
+  },
 
   setStatus: (status) => set({ status }),
+  setModel: (model) => set({ model }),
   setActiveTask: (task) => set({ activeTask: task }),
+  setCounts: (counts) => set((s) => ({ ...s, ...counts })),
   incrementMessages: () => set((s) => ({ messageCount: s.messageCount + 1 })),
 
   addActivity: (item) =>
     set((s) => ({
       activities: [
-        { ...item, id: `act-${Date.now()}`, timestamp: new Date() },
+        normalizeActivity(item),
         ...s.activities.slice(0, 49),
       ],
     })),
+  replaceActivities: (items) =>
+    set({
+      activities: items.slice(0, 75).map((item) => normalizeActivity(item)),
+    }),
 
   tick: () => set((s) => ({ uptime: s.uptime + 1 })),
+  applyRuntimeConfig: (config) =>
+    set({
+      ...config,
+      configHydrated: true,
+    }),
   updateMechanics: (mechanics) => set((s) => ({ ...s, ...mechanics })),
 }));
 
