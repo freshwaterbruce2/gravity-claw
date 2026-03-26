@@ -412,7 +412,7 @@ function getSystemInstruction() {
   const shellStatus = appConfig.directShellEnabled ? 'enabled' : 'disabled';
   const gitStatus = appConfig.gitPipelineEnabled ? 'enabled' : 'disabled';
 
-  let instruction = `${soulContent}\n\nYou have capabilities across 34+ skills including file management, web search, and data analysis via MCP Tools. Always prioritize using your tools to answer questions precisely.\n\nRuntime policy:\n- Direct shell execution is currently ${shellStatus}.\n- Native git pipeline is currently ${gitStatus}.\n- If a shell or git command is blocked, explain the policy constraint cleanly and choose the safest local alternative.`;
+  let instruction = `${soulContent}\n\nYou have ${Object.keys(availableMcpToolsMap).length} MCP tools available right now. You MUST use tool function calls to execute actions — never output commands for the user to run manually. When the user asks you to do something, call the appropriate tool. Multiple tools can be called in sequence.\n\nRuntime policy:\n- Direct shell execution is currently ${shellStatus}.\n- Native git pipeline is currently ${gitStatus}.\n- If a shell or git command is blocked, explain the policy constraint cleanly and choose the safest local alternative.\n- For ANY actionable request (lint, build, file ops, cleanup, etc.), call your tools directly. Do NOT print code blocks for the user to execute.`;
 
   if (memoryContext) {
     instruction += `\n\n${memoryContext}`;
