@@ -1,19 +1,40 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, net, protocol, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
-import net from 'node:net';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  getNodeExecutable,
+  getWorkspaceToolPath,
+  waitForPort,
+  waitForProcessPort,
+} from '../scripts/runtime-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '..');
+const APP_PROTOCOL = 'app';
+const APP_PROTOCOL_HOST = 'app';
+const APP_PROTOCOL_ORIGIN = `${APP_PROTOCOL}://${APP_PROTOCOL_HOST}`;
 const PRELOAD_PATH = path.join(__dirname, 'preload.mjs');
 const DIST_INDEX_PATH = path.join(APP_ROOT, 'dist', 'index.html');
-const BACKEND_PORT = 5178;
+const DIST_ROOT = path.join(APP_ROOT, 'dist');
+const BACKEND_PORT = Number(process.env.GRAVITY_CLAW_PORT ?? process.env.PORT ?? 5187);
 const RENDERER_URL = process.env.GRAVITY_CLAW_RENDERER_URL?.trim() || null;
+const SERVER_ENTRY = path.join(APP_ROOT, 'server', 'src', 'index.ts');
 
 let mainWindow = null;
 let backendProcess = null;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: APP_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+    },
+  },
+]);
 
 function getStateFilePath() {
   return path.join(app.getPath('userData'), 'gravity-claw-state.json');
@@ -66,59 +87,104 @@ async function updateState(mutator) {
   return nextState;
 }
 
-function getPnpmCommand() {
-  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+function createOutputBuffer(limit = 6_000) {
+  let value = '';
+
+  return {
+    push(chunk) {
+      value = `${value}${chunk.toString()}`;
+      if (value.length > limit) {
+        value = value.slice(-limit);
+      }
+    },
+    read() {
+      return value.trim();
+    },
+  };
 }
 
-function waitForPort(port, timeoutMs = 15000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-
-    const tryConnect = () => {
-      const socket = net.createConnection({ host: '127.0.0.1', port });
-
-      socket.once('connect', () => {
-        socket.end();
-        resolve(true);
-      });
-
-      socket.once('error', () => {
-        socket.destroy();
-        if (Date.now() - start >= timeoutMs) {
-          resolve(false);
-          return;
-        }
-
-        setTimeout(tryConnect, 300);
-      });
-    };
-
-    tryConnect();
-  });
+async function isBackendHealthy(port = BACKEND_PORT) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      signal: AbortSignal.timeout(1_500),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function ensureBackendServer() {
-  const alreadyRunning = await waitForPort(BACKEND_PORT, 750);
+  const alreadyRunning = await isBackendHealthy();
   if (alreadyRunning) {
     return;
   }
 
-  const pnpmCommand = getPnpmCommand();
-  backendProcess = spawn(pnpmCommand, ['-C', APP_ROOT, 'run', 'server'], {
+  const nodeExecutable = getNodeExecutable();
+  const tsxCli = getWorkspaceToolPath(APP_ROOT, 'tsx', 'dist', 'cli.mjs');
+  const outputBuffer = createOutputBuffer();
+
+  backendProcess = spawn(nodeExecutable, [tsxCli, SERVER_ENTRY], {
     cwd: APP_ROOT,
     env: process.env,
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+
+  backendProcess.stdout?.on('data', (chunk) => outputBuffer.push(chunk));
+  backendProcess.stderr?.on('data', (chunk) => outputBuffer.push(chunk));
 
   backendProcess.once('exit', () => {
     backendProcess = null;
   });
 
-  const backendReady = await waitForPort(BACKEND_PORT, 15000);
-  if (!backendReady) {
-    throw new Error('Gravity-Claw backend failed to start on port 5178.');
+  try {
+    await waitForProcessPort({
+      childProcess: backendProcess,
+      port: BACKEND_PORT,
+      timeoutMs: 15_000,
+      label: 'Gravity-Claw backend',
+    });
+
+    const startedHealthyAt = Date.now();
+    while (!(await isBackendHealthy())) {
+      if (Date.now() - startedHealthyAt >= 15_000) {
+        throw new Error(`Gravity-Claw backend did not become healthy on port ${BACKEND_PORT}.`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  } catch (error) {
+    const details = outputBuffer.read();
+    if (details) {
+      throw new Error(`${error.message}\n\nBackend output:\n${details}`);
+    }
+
+    throw error;
   }
+}
+
+function resolveAppAssetPath(requestUrl) {
+  const url = new URL(requestUrl);
+  const pathname = decodeURIComponent(url.pathname || '/');
+  const requestedPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const candidatePath = path.normalize(path.join(DIST_ROOT, requestedPath));
+  const isWithinDistRoot = candidatePath.startsWith(DIST_ROOT);
+
+  if (!isWithinDistRoot) {
+    return DIST_INDEX_PATH;
+  }
+
+  const hasExtension = path.extname(candidatePath).length > 0;
+
+  return hasExtension ? candidatePath : DIST_INDEX_PATH;
+}
+
+function registerAppProtocol() {
+  protocol.handle(APP_PROTOCOL, (request) => {
+    const filePath = resolveAppAssetPath(request.url);
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
 }
 
 async function createMainWindow() {
@@ -148,7 +214,7 @@ async function createMainWindow() {
     await mainWindow.loadURL(RENDERER_URL);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    await mainWindow.loadFile(DIST_INDEX_PATH);
+    await mainWindow.loadURL(`${APP_PROTOCOL_ORIGIN}/`);
   }
 }
 
@@ -225,6 +291,7 @@ ipcMain.handle('gravity-claw:storage:remove-item', async (_event, key) => {
 });
 
 app.whenReady().then(async () => {
+  registerAppProtocol();
   await createMainWindow();
 
   app.on('activate', async () => {

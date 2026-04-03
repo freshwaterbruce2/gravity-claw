@@ -1,4 +1,5 @@
 import type { EventBus } from './event-bus.js';
+import { extractGatewayServerList, extractGatewayTools } from './mcp.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ export async function fetchMcpHealth(): Promise<McpServerHealth[]> {
       return results;
     }
 
-    const servers: string[] = await serversRes.json() as string[];
+    const servers = extractGatewayServerList(await serversRes.json() as unknown);
 
     const checks = servers.map(async (server): Promise<McpServerHealth> => {
       const start = Date.now();
@@ -36,7 +37,7 @@ export async function fetchMcpHealth(): Promise<McpServerHealth[]> {
           return { server, status: 'offline', toolCount: 0, latencyMs, lastChecked: Date.now() };
         }
 
-        const tools = (await toolsRes.json()) as unknown[];
+        const tools = extractGatewayTools(await toolsRes.json() as unknown);
         const status = latencyMs > DEGRADED_LATENCY_MS ? 'degraded' : 'online';
         return { server, status, toolCount: tools.length, latencyMs, lastChecked: Date.now() };
       } catch {

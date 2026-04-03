@@ -17,6 +17,7 @@ export interface GravityClawSkillEngineConfig {
 }
 
 export interface GravityClawConfig {
+  name: string;
   model: string;
   gravityMechanicEnabled: boolean;
   memoryEnabled: boolean;
@@ -31,9 +32,8 @@ export interface GravityClawConfig {
   skillEngine: GravityClawSkillEngineConfig;
 }
 
-const CONFIG_PATH = path.join(process.cwd(), '.gravity-claw.config.json');
-
 const DEFAULT_CONFIG: GravityClawConfig = {
+  name: 'G-CLAW-01',
   model: 'gemini-2.5-flash',
   gravityMechanicEnabled: true,
   memoryEnabled: true,
@@ -60,9 +60,24 @@ const DEFAULT_CONFIG: GravityClawConfig = {
 };
 
 let cachedConfig: GravityClawConfig | null = null;
+let cachedConfigPath: string | null = null;
 
-function sanitizeConfig(input: Partial<GravityClawConfig> | null | undefined): GravityClawConfig {
+function getConfigPath(): string {
+  const envPath = process.env.GRAVITY_CLAW_CONFIG_PATH?.trim();
+
+  return envPath && envPath.length > 0
+    ? path.resolve(envPath)
+    : path.join(process.cwd(), '.gravity-claw.config.json');
+}
+
+export function sanitizeConfig(
+  input: Partial<GravityClawConfig> | null | undefined,
+): GravityClawConfig {
   return {
+    name:
+      typeof input?.name === 'string' && input.name.trim().length > 0
+        ? input.name.trim()
+        : DEFAULT_CONFIG.name,
     model:
       typeof input?.model === 'string' && input.model.trim().length > 0
         ? input.model.trim()
@@ -148,15 +163,19 @@ function sanitizeConfig(input: Partial<GravityClawConfig> | null | undefined): G
 }
 
 export async function getGravityClawConfig(): Promise<GravityClawConfig> {
-  if (cachedConfig) {
+  const configPath = getConfigPath();
+
+  if (cachedConfig && cachedConfigPath === configPath) {
     return cachedConfig;
   }
 
   try {
-    const raw = await readFile(CONFIG_PATH, 'utf8');
+    const raw = await readFile(configPath, 'utf8');
     cachedConfig = sanitizeConfig(JSON.parse(raw) as Partial<GravityClawConfig>);
+    cachedConfigPath = configPath;
   } catch {
     cachedConfig = DEFAULT_CONFIG;
+    cachedConfigPath = configPath;
   }
 
   return cachedConfig;
@@ -167,10 +186,17 @@ export async function updateGravityClawConfig(
 ): Promise<GravityClawConfig> {
   const current = await getGravityClawConfig();
   const merged = sanitizeConfig({ ...current, ...nextConfig });
+  const configPath = getConfigPath();
 
-  await mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-  await writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
+  await mkdir(path.dirname(configPath), { recursive: true });
+  await writeFile(configPath, JSON.stringify(merged, null, 2), 'utf8');
   cachedConfig = merged;
+  cachedConfigPath = configPath;
 
   return merged;
+}
+
+export function resetGravityClawConfigCache(): void {
+  cachedConfig = null;
+  cachedConfigPath = null;
 }

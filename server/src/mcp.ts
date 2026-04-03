@@ -18,21 +18,62 @@ export interface McpServerWithTools {
   tools: McpTool[];
 }
 
+export function extractGatewayServerList(payload: unknown): string[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((entry): entry is string => typeof entry === 'string');
+  }
+
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    Array.isArray((payload as { servers?: unknown }).servers)
+  ) {
+    return (payload as { servers: unknown[] }).servers.filter(
+      (entry): entry is string => typeof entry === 'string'
+    );
+  }
+
+  return [];
+}
+
+export function extractGatewayTools(payload: unknown): McpTool[] {
+  if (Array.isArray(payload)) {
+    return payload as McpTool[];
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return [];
+  }
+
+  const directTools = (payload as { tools?: unknown }).tools;
+
+  if (Array.isArray(directTools)) {
+    return directTools as McpTool[];
+  }
+
+  if (
+    directTools &&
+    typeof directTools === 'object' &&
+    Array.isArray((directTools as { tools?: unknown }).tools)
+  ) {
+    return (directTools as { tools: McpTool[] }).tools;
+  }
+
+  return [];
+}
+
 export async function fetchAllMcpTools(): Promise<McpServerWithTools[]> {
   try {
     const res = await fetch(`${GATEWAY_URL}/servers`);
     if (!res.ok) return [];
-    const { servers } = await res.json() as { servers: string[] };
+    const servers = extractGatewayServerList(await res.json() as unknown);
 
     const serverTools = await Promise.all(
       servers.map(async (server) => {
         try {
           const tRes = await fetch(`${GATEWAY_URL}/servers/${server}/tools`);
           if (!tRes.ok) return null;
-          const data = await tRes.json() as { tools: { tools: McpTool[] } };
-          // Note: The HTTP API structure depends on how the gateway wraps the result.
-          // Usually it's { server: string, tools: { tools: [...] } } or { server: string, tools: [...] }
-          const tools = Array.isArray(data.tools) ? data.tools : data.tools?.tools ?? [];
+          const tools = extractGatewayTools(await tRes.json() as unknown);
           return { server, tools };
         } catch {
           return null;

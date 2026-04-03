@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getStoredValue, removeStoredValue, setStoredValue } from '../lib/authBridge';
+import { buildApiUrl } from '../lib/runtime';
 
 export interface Message {
   id: string;
@@ -74,7 +75,6 @@ async function persistMessages(messages: Message[]): Promise<void> {
   }
 }
 
-const PROXY = 'http://localhost:5178';
 const DEFAULT_MODEL = 'gemini-flash-latest';
 const MAX_MESSAGE_CHARS = 100_000;
 const TRUNCATED_SUFFIX = '\n\n[Truncated]';
@@ -169,7 +169,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     history.push({ role: 'user', content: capMessageContent(userText) });
 
     try {
-      const res = await fetch(`${PROXY}/api/chat`, {
+      const res = await fetch(buildApiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, model, apiKey, kimiApiKey }),

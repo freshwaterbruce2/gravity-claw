@@ -6,11 +6,10 @@ import {
   type GravityClawPlatformConfig,
   type GravityClawSkillEngineConfig,
 } from '../lib/runtimeConfig';
+import { buildApiUrl } from '../lib/runtime';
 import { useAgentStore } from '../stores/agentStore';
 import { useAuthStore } from '../stores/authStore';
 import './Settings.css';
-
-const PROXY = 'http://localhost:5178';
 
 const PLATFORMS = [
   { id: 'telegram', label: 'Telegram', icon: '✈️' },
@@ -64,8 +63,6 @@ function SettingsForm() {
     gitPipelineEnabled,
     oauthLoopholeEmail,
     applyRuntimeConfig,
-    setModel,
-    updateMechanics,
   } = agentState;
   const { geminiKey, kimiKey, loginWithGemini, loginWithKimi, logout } = useAuthStore();
   const [agentName, setAgentName] = useState(name);
@@ -103,8 +100,8 @@ function SettingsForm() {
     let isMounted = true;
 
     void (async () => {
-      try {
-        const response = await fetch(`${PROXY}/api/models`);
+        try {
+        const response = await fetch(buildApiUrl('/api/models'));
         if (!response.ok) {
           return;
         }
@@ -156,10 +153,10 @@ function SettingsForm() {
   };
 
   const handleSave = async () => {
-    setModel(selectedModel);
     setSaveError('');
 
     const nextConfig = {
+      name: agentName.trim() || DEFAULT_RUNTIME_CONFIG.name,
       model: selectedModel,
       memoryEnabled: memory,
       gravityMechanicEnabled: gravityEnabled,
@@ -177,7 +174,6 @@ function SettingsForm() {
     try {
       const savedConfig = await saveRuntimeConfig(nextConfig);
       applyRuntimeConfig(savedConfig);
-      updateMechanics(savedConfig);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {

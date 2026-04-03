@@ -1,4 +1,4 @@
-const PROXY = 'http://localhost:5178';
+import { buildApiUrl } from './runtime';
 
 export type LiveTaskStatus = 'backlog' | 'running' | 'done';
 export type LiveTaskPriority = 'critical' | 'high' | 'medium' | 'low';
@@ -73,7 +73,7 @@ export interface LiveMcpStatus {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${PROXY}${path}`, init);
+  const response = await fetch(buildApiUrl(path), init);
 
   if (!response.ok) {
     const error = await response.text().catch(() => '');

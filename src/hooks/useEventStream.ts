@@ -6,6 +6,7 @@ import {
   normalizeSkillList,
   normalizeTaskList,
 } from '../lib/liveApi';
+import { buildSseUrl } from '../lib/runtime';
 import { useAgentStore } from '../stores/agentStore';
 import { useIntegrationStore } from '../stores/integrationStore';
 import { useMcpStore } from '../stores/mcpStore';
@@ -86,7 +87,7 @@ export function useEventStream() {
 
     function connect() {
       setStatus(retryRef.current > 0 ? 'reconnecting' : 'connecting');
-      es = new EventSource('http://localhost:5178/api/stream');
+      es = new EventSource(buildSseUrl('/api/stream'));
 
       es.onopen = () => {
         setStatus('connected');

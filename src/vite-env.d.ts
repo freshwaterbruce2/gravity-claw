@@ -18,9 +18,16 @@ interface GravityClawDesktopStorageBridge {
   removeItem(key: string): Promise<void>;
 }
 
+interface GravityClawDesktopRuntimeInfo {
+  apiBase: string;
+  isDesktop: boolean;
+}
+
 interface GravityClawDesktopApi {
   auth?: GravityClawDesktopAuthBridge;
   storage?: GravityClawDesktopStorageBridge;
+  runtime?: GravityClawDesktopRuntimeInfo;
+  platform?: string;
 }
 
 interface Window {

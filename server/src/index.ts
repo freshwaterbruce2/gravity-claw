@@ -14,6 +14,7 @@ import { serve as serveInngest } from 'inngest/hono';
 import { inngest } from '@vibetech/inngest-client';
 import { filterServerToolsByPolicy, enforceToolPolicy } from './capability-policy.js';
 import { getGravityClawConfig, updateGravityClawConfig, type GravityClawConfig } from './config.js';
+import { resolveCorsOrigin } from './cors.js';
 import { createEventBus } from './event-bus.js';
 import { buildIntegrationSnapshot, getTelegramBridgeStatus, setTelegramBridgeStatus } from './integrations.js';
 import { fetchMcpHealth, startMcpHealthPoller, type McpServerHealth } from './mcp-health.js';
@@ -43,7 +44,7 @@ dotenv.config({ override: true });
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FALLBACK_MODELS = [
   'gemini-2.5-pro',
-  'gemini-3.1-pro-preview',
+  'gemini-3.1-pro-preview-customtools',
   'gemini-flash-latest',
 ];
 
@@ -52,10 +53,12 @@ const KIMI_API_BASE = 'https://api.moonshot.ai/v1';
 const MAX_TOOL_ROUNDS = 30;
 const MAX_HISTORY_CHARS = 3_200_000; // ~800K tokens, leaves headroom for system prompt + response
 const MAX_SINGLE_MESSAGE_CHARS = 200_000;
-const PORT = Number(process.env.GRAVITY_CLAW_PORT ?? 5178);
+const PREFERRED_PORT = Number(process.env.GRAVITY_CLAW_PORT ?? process.env.PORT ?? 5178);
+const PORT_FILE = path.resolve(__dirname, '..', '..', '.server-port');
 const MCP_GATEWAY_PORT = 3100;
 const WORKSPACE_ROOT = path.resolve(process.cwd(), '..', '..');
 const MCP_GATEWAY_ROOT = path.resolve(WORKSPACE_ROOT, 'apps', 'mcp-gateway');
+const WINDOWS_PYTHON_LAUNCHER = 'C:\\Windows\\py.exe';
 
 // ── Memory Integration ───────────────────────────────────────────────────────
 const MEMORY_HTTP_URL = 'http://localhost:3200';
@@ -171,6 +174,10 @@ async function ensureMcpGateway() {
   const gatewayEntry = path.join(MCP_GATEWAY_ROOT, 'src', 'index.ts');
   const nodePath = process.execPath;
   const tsxCli = path.join(WORKSPACE_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  const pythonLauncherPath =
+    process.platform === 'win32' && fs.existsSync(WINDOWS_PYTHON_LAUNCHER)
+      ? WINDOWS_PYTHON_LAUNCHER
+      : undefined;
 
   if (!fs.existsSync(tsxCli)) {
     console.log('  ⚠️ tsx CLI not found; unable to auto-start MCP gateway.');
@@ -183,6 +190,16 @@ async function ensureMcpGateway() {
     env: {
       ...process.env,
       MCP_CONFIG_PATH: path.join(WORKSPACE_ROOT, '.mcp.json'),
+      MCP_GATEWAY_NODE_PATH:
+        process.env.MCP_GATEWAY_NODE_PATH ??
+        process.env.GRAVITY_CLAW_NODE_PATH ??
+        nodePath,
+      ...(pythonLauncherPath
+        ? {
+            MCP_GATEWAY_PYTHON_PATH:
+              process.env.MCP_GATEWAY_PYTHON_PATH ?? pythonLauncherPath,
+          }
+        : {}),
     },
     stdio: 'ignore',
     windowsHide: true,
@@ -387,7 +404,7 @@ async function refreshMcpTools(retries = 0) {
 }
 
 await ensureMcpGateway();
-refreshMcpTools();
+await refreshMcpTools();
 if (appConfig.memoryEnabled) {
   refreshMemoryContext().catch(() => {});
   callMemoryTool('memory_set_context', { project: 'gravity-claw', status: 'online' }).catch(() => {});
@@ -408,11 +425,25 @@ startSystemMetrics(eventBus);
 setToolRefreshDeps({ refreshMcpTools });
 
 // ── 3. Gemini Helpers ────────────────────────────────────────────────────────
+
+/** Gemini 3.1 Pro Preview ignores custom function declarations unless using the -customtools variant */
+function resolveModelId(requestedModel: string): string {
+  if (requestedModel === 'gemini-3.1-pro-preview' && geminiFunctionTool) {
+    return 'gemini-3.1-pro-preview-customtools';
+  }
+  return requestedModel;
+}
+
 function getSystemInstruction() {
   const shellStatus = appConfig.directShellEnabled ? 'enabled' : 'disabled';
   const gitStatus = appConfig.gitPipelineEnabled ? 'enabled' : 'disabled';
 
-  let instruction = `${soulContent}\n\nYou have ${Object.keys(availableMcpToolsMap).length} MCP tools available right now. You MUST use tool function calls to execute actions — never output commands for the user to run manually. When the user asks you to do something, call the appropriate tool. Multiple tools can be called in sequence.\n\nRuntime policy:\n- Direct shell execution is currently ${shellStatus}.\n- Native git pipeline is currently ${gitStatus}.\n- If a shell or git command is blocked, explain the policy constraint cleanly and choose the safest local alternative.\n- For ANY actionable request (lint, build, file ops, cleanup, etc.), call your tools directly. Do NOT print code blocks for the user to execute.`;
+  const toolCount = Object.keys(availableMcpToolsMap).length;
+  const toolStatus = toolCount > 0
+    ? `You have ${toolCount} MCP tools available right now.`
+    : `MCP tools are currently loading or unavailable. If tools become available during this conversation, use them.`;
+
+  let instruction = `${soulContent}\n\n${toolStatus} You MUST use tool function calls to execute actions — never output commands for the user to run manually. When the user asks you to do something, call the appropriate tool. Multiple tools can be called in sequence.\n\nRuntime policy:\n- Direct shell execution is currently ${shellStatus}.\n- Native git pipeline is currently ${gitStatus}.\n- If a shell or git command is blocked, explain the policy constraint cleanly and choose the safest local alternative.\n- For ANY actionable request (lint, build, file ops, cleanup, etc.), call your tools directly. Do NOT print code blocks for the user to execute.`;
 
   if (memoryContext) {
     instruction += `\n\n${memoryContext}`;
@@ -423,7 +454,7 @@ function getSystemInstruction() {
 
 function createModel(genAI: GoogleGenerativeAI, modelId: string = DEFAULT_MODEL) {
   return genAI.getGenerativeModel({
-    model: modelId,
+    model: resolveModelId(modelId),
     systemInstruction: getSystemInstruction(),
     tools: geminiFunctionTool ? [geminiFunctionTool] : undefined,
   });
@@ -501,7 +532,7 @@ async function sendWithFallback(
       const status = err?.status || err?.response?.status;
       const isFetchError = err?.message?.includes('fetch failed') || err?.message?.includes('Error fetching from');
       
-      if (status === 503 || status === 429 || status === 500 || isFetchError) {
+      if (status === 400 || status === 404 || status === 503 || status === 429 || status === 500 || isFetchError) {
         console.log(`  ⚠️ ${modelId} unavailable (Status: ${status || 'fetch failed'}), trying next...`);
         continue;
       }
@@ -645,7 +676,7 @@ function trimHistory(messages: { role: string; content: string }[]): { role: str
 
 // ── 5. HTTP API ──────────────────────────────────────────────────────────────
 app.use('*', cors({
-  origin: (origin) => origin?.startsWith('http://localhost:') || origin?.startsWith('http://127.0.0.1:') ? origin : 'http://localhost:5177',
+  origin: (origin) => resolveCorsOrigin(origin),
   allowMethods: ['GET', 'POST', 'PUT', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -1027,28 +1058,49 @@ app.post('/api/chat', async (c) => {
   const genAI = new GoogleGenerativeAI(resolvedApiKey);
 
   return stream(c, async (writer) => {
-    try {
-      const generativeModel = genAI.getGenerativeModel({
-        model,
-        systemInstruction: system ?? getSystemInstruction(),
-        tools: geminiFunctionTool ? [geminiFunctionTool] : undefined,
-      });
+    const resolvedModel = resolveModelId(model);
+    // Build fallback list: try resolved first, then alternate variant if it differs
+    const fallbacks = new Set([resolvedModel]);
+    if (resolvedModel !== model) fallbacks.add(model);
+    // If customtools variant, also try the plain model as fallback (API key may lack access)
+    if (model.endsWith('-customtools')) fallbacks.add(model.replace('-customtools', ''));
+    if (resolvedModel.endsWith('-customtools')) fallbacks.add(resolvedModel.replace('-customtools', ''));
+    const modelsToTry = [...fallbacks];
 
-      const lastMessage = trimmedMessages[trimmedMessages.length - 1];
-      const history = trimmedMessages.slice(0, -1).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }],
-      }));
+    for (const modelId of modelsToTry) {
+      try {
+        const generativeModel = genAI.getGenerativeModel({
+          model: modelId,
+          systemInstruction: system ?? getSystemInstruction(),
+          tools: geminiFunctionTool ? [geminiFunctionTool] : undefined,
+        });
 
-      const chatSession = generativeModel.startChat({ history });
-      const result = await chatSession.sendMessage(lastMessage.content);
-      const finalReply = await handleFunctionCalls(generativeModel, chatSession, result.response);
+        const lastMessage = trimmedMessages[trimmedMessages.length - 1];
+        const history = trimmedMessages.slice(0, -1).map(m => ({
+          role: m.role === 'user' ? 'user' : 'model',
+          parts: [{ text: m.content }],
+        }));
 
-      captureExchange(lastMessage.content, finalReply).catch(() => {});
-      await writer.write(finalReply);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gemini API error';
-      await writer.write(`\n\n[ERROR: ${msg}]`);
+        const chatSession = generativeModel.startChat({ history });
+        const result = await chatSession.sendMessage(lastMessage.content);
+        const finalReply = await handleFunctionCalls(generativeModel, chatSession, result.response);
+
+        if (modelId !== resolvedModel) {
+          console.log(`  ⚡ Fell back from ${resolvedModel} to ${modelId}`);
+        }
+        captureExchange(lastMessage.content, finalReply).catch(() => {});
+        await writer.write(finalReply);
+        return;
+      } catch (err: unknown) {
+        const status = (err as any)?.status || (err as any)?.response?.status;
+        if ((status === 400 || status === 404) && modelId !== modelsToTry[modelsToTry.length - 1]) {
+          console.log(`  ⚠️ ${modelId} returned ${status}, trying fallback...`);
+          continue;
+        }
+        const msg = err instanceof Error ? err.message : 'Gemini API error';
+        await writer.write(`\n\n[ERROR: ${msg}]`);
+        return;
+      }
     }
   });
 });
@@ -1058,6 +1110,7 @@ app.get('/api/models', (c) => {
     models: [
       // Google Gemini — current lineup (March 2026)
       { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)', provider: 'google' },
+      { id: 'gemini-3.1-pro-preview-customtools', label: 'Gemini 3.1 Pro (Tool Use)', provider: 'google' },
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'google' },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'google' },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'google' },
@@ -1120,18 +1173,56 @@ app.get('/api/mcp/status', (c) => {
   return c.json(lastMcpHealth.length > 0 ? lastMcpHealth : snapshot.get('mcp.status') ?? []);
 });
 
-// ── 8. Start Server ──────────────────────────────────────────────────────────
-serve({ fetch: app.fetch, port: PORT }, () => {
-  console.log(`\n  🦀 gravity-claw proxy running\n  ➜  http://localhost:${PORT}`);
-  console.log(`  📡 Inngest endpoint: http://localhost:${PORT}/api/inngest\n`);
+// ── 8. Start Server (dynamic port discovery) ────────────────────────────────
+
+function findOpenPort(start: number, maxAttempts = 20): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let attempt = 0;
+    function tryPort(port: number) {
+      const srv = net.createServer();
+      srv.once('error', () => {
+        attempt++;
+        if (attempt >= maxAttempts) {
+          reject(new Error(`No open port found in range ${start}-${start + maxAttempts}`));
+        } else {
+          tryPort(port + 1);
+        }
+      });
+      srv.listen(port, () => srv.close(() => resolve(port)));
+    }
+    tryPort(start);
+  });
+}
+
+function writePortFile(port: number) {
+  fs.writeFileSync(PORT_FILE, String(port), 'utf8');
+}
+
+function cleanupPortFile() {
+  try { fs.unlinkSync(PORT_FILE); } catch {}
+}
+
+const resolvedPort = await findOpenPort(PREFERRED_PORT);
+
+serve({ fetch: app.fetch, port: resolvedPort }, () => {
+  writePortFile(resolvedPort);
+  if (resolvedPort !== PREFERRED_PORT) {
+    console.log(`\n  🦀 gravity-claw proxy running (port ${PREFERRED_PORT} was busy)`);
+  } else {
+    console.log(`\n  🦀 gravity-claw proxy running`);
+  }
+  console.log(`  ➜  http://localhost:${resolvedPort}`);
+  console.log(`  📡 Inngest endpoint: http://localhost:${resolvedPort}/api/inngest\n`);
 });
 
-function shutdownGateway() {
+function shutdown() {
+  cleanupPortFile();
   if (mcpGatewayProcess && !mcpGatewayProcess.killed) {
     mcpGatewayProcess.kill();
     mcpGatewayProcess = null;
   }
 }
 
-process.once('SIGINT', shutdownGateway);
-process.once('SIGTERM', shutdownGateway);
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);
+process.once('exit', cleanupPortFile);

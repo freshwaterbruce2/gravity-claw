@@ -100,7 +100,7 @@ function normalizeActivity(item: ActivitySeed): ActivityItem {
 }
 
 export const useAgentStore = create<AgentState>((set) => ({
-  name: 'G-CLAW-01',
+  name: DEFAULT_RUNTIME_CONFIG.name,
   model: DEFAULT_RUNTIME_CONFIG.model,
   status: 'online',
   uptime: 0,

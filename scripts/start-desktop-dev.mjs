@@ -1,41 +1,21 @@
 import { spawn } from 'node:child_process';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  getElectronExecutable,
+  getNodeExecutable,
+  getWorkspaceToolPath,
+  waitForProcessPort,
+} from './runtime-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '..');
 const ELECTRON_ENTRY = path.join(APP_ROOT, 'electron', 'main.mjs');
-const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const nodeExecutable = getNodeExecutable();
+const viteCli = getWorkspaceToolPath(APP_ROOT, 'vite', 'bin', 'vite.js');
+const electronExecutable = getElectronExecutable(APP_ROOT);
 
-function waitForPort(port, timeoutMs = 20000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-
-    const tryConnect = () => {
-      const socket = net.createConnection({ host: '127.0.0.1', port });
-
-      socket.once('connect', () => {
-        socket.end();
-        resolve(true);
-      });
-
-      socket.once('error', () => {
-        socket.destroy();
-        if (Date.now() - start >= timeoutMs) {
-          resolve(false);
-          return;
-        }
-
-        setTimeout(tryConnect, 300);
-      });
-    };
-
-    tryConnect();
-  });
-}
-
-const rendererProcess = spawn(pnpmCommand, ['-C', APP_ROOT, 'run', 'dev'], {
+const rendererProcess = spawn(nodeExecutable, [viteCli, '--port', '5177'], {
   cwd: APP_ROOT,
   env: process.env,
   stdio: 'inherit',
@@ -52,25 +32,29 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 process.on('exit', shutdown);
 
-const rendererReady = await waitForPort(5177, 20000);
-if (!rendererReady) {
-  shutdown();
-  throw new Error('Gravity-Claw renderer did not start on port 5177.');
-}
+await waitForProcessPort({
+  childProcess: rendererProcess,
+  port: 5177,
+  timeoutMs: 20_000,
+  label: 'Gravity-Claw renderer',
+});
 
-const electronProcess = spawn(
-  pnpmCommand,
-  ['-C', APP_ROOT, 'exec', 'electron', ELECTRON_ENTRY],
-  {
-    cwd: APP_ROOT,
-    env: {
-      ...process.env,
-      GRAVITY_CLAW_RENDERER_URL: 'http://127.0.0.1:5177',
-    },
-    stdio: 'inherit',
-    windowsHide: false,
-  }
-);
+const electronProcess = spawn(electronExecutable, [ELECTRON_ENTRY], {
+  cwd: APP_ROOT,
+  env: {
+    ...process.env,
+    GRAVITY_CLAW_NODE_PATH: nodeExecutable,
+    GRAVITY_CLAW_RENDERER_URL: 'http://127.0.0.1:5177',
+  },
+  stdio: 'inherit',
+  windowsHide: false,
+});
+
+electronProcess.once('error', (error) => {
+  console.error(`Failed to start Gravity-Claw desktop shell: ${error.message}`);
+  shutdown();
+  process.exit(1);
+});
 
 electronProcess.once('exit', (code) => {
   shutdown();

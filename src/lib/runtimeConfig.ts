@@ -1,4 +1,4 @@
-const PROXY = 'http://localhost:5178';
+import { buildApiUrl } from './runtime';
 
 export interface GravityClawPlatformConfig {
   telegram: boolean;
@@ -16,6 +16,7 @@ export interface GravityClawSkillEngineConfig {
 }
 
 export interface GravityClawRuntimeConfig {
+  name: string;
   model: string;
   memoryEnabled: boolean;
   gravityMechanicEnabled: boolean;
@@ -31,6 +32,7 @@ export interface GravityClawRuntimeConfig {
 }
 
 export const DEFAULT_RUNTIME_CONFIG: GravityClawRuntimeConfig = {
+  name: 'G-CLAW-01',
   model: 'gemini-2.5-flash',
   memoryEnabled: true,
   gravityMechanicEnabled: true,
@@ -60,6 +62,10 @@ function mergeRuntimeConfig(config: Partial<GravityClawRuntimeConfig>): GravityC
   return {
     ...DEFAULT_RUNTIME_CONFIG,
     ...config,
+    name:
+      typeof config.name === 'string' && config.name.trim().length > 0
+        ? config.name.trim()
+        : DEFAULT_RUNTIME_CONFIG.name,
     model:
       typeof config.model === 'string' && config.model.trim().length > 0
         ? config.model.trim()
@@ -76,7 +82,7 @@ function mergeRuntimeConfig(config: Partial<GravityClawRuntimeConfig>): GravityC
 }
 
 export async function getRuntimeConfig(): Promise<GravityClawRuntimeConfig> {
-  const response = await fetch(`${PROXY}/api/config`);
+  const response = await fetch(buildApiUrl('/api/config'));
   if (!response.ok) {
     throw new Error(`Unable to load config (HTTP ${response.status})`);
   }
@@ -88,7 +94,7 @@ export async function getRuntimeConfig(): Promise<GravityClawRuntimeConfig> {
 export async function saveRuntimeConfig(
   config: GravityClawRuntimeConfig
 ): Promise<GravityClawRuntimeConfig> {
-  const response = await fetch(`${PROXY}/api/config`, {
+  const response = await fetch(buildApiUrl('/api/config'), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),

@@ -1,4 +1,5 @@
 import type { Page } from '../../App';
+import { buildApiUrl } from '../../lib/runtime';
 import { useIntegrationStore } from '../../stores/integrationStore';
 import { useSkillsStore } from '../../stores/skillsStore';
 import { useTaskStore } from '../../stores/taskStore';
@@ -29,7 +30,7 @@ export default function QuickActionsWidget({ onNavigate }: QuickActionsWidgetPro
     }
 
     if (action.action === 'refresh-tools') {
-      await fetch('http://localhost:5178/api/refresh-tools', { method: 'POST' });
+      await fetch(buildApiUrl('/api/refresh-tools'), { method: 'POST' });
       return;
     }
 

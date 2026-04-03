@@ -72,6 +72,14 @@
         "cwd": "apps/gravity-claw"
       }
     },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "pnpm run test",
+        "cwd": "apps/gravity-claw"
+      }
+    },
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
@@ -106,5 +114,5 @@
       "cache": false
     }
   },
-  "tags": ["scope:gravity", "type:application", "platform:desktop"]
+    "tags": ["scope:gravity", "type:application", "platform:desktop"]
 }

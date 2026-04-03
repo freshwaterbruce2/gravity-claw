@@ -43,15 +43,33 @@ function aggregateMcpStatus(mcpServers: McpServerHealth[]): IntegrationStatus {
     return 'offline';
   }
 
-  if (mcpServers.some((server) => server.status === 'offline')) {
+  const onlineServers = mcpServers.filter((server) => server.status === 'online').length;
+  const degradedServers = mcpServers.filter((server) => server.status === 'degraded').length;
+
+  if (onlineServers === 0 && degradedServers === 0) {
     return 'offline';
   }
 
-  if (mcpServers.some((server) => server.status === 'degraded')) {
+  if (onlineServers !== mcpServers.length || degradedServers > 0) {
     return 'degraded';
   }
 
   return 'online';
+}
+
+function describeMcpGateway(mcpServers: McpServerHealth[]): string {
+  if (mcpServers.length === 0) {
+    return 'No MCP servers responded yet.';
+  }
+
+  const respondingServers = mcpServers.filter((server) => server.status !== 'offline').length;
+  const offlineServers = mcpServers.length - respondingServers;
+
+  if (offlineServers === 0) {
+    return `${respondingServers} server(s) healthy through the gateway.`;
+  }
+
+  return `${respondingServers}/${mcpServers.length} server(s) responding through the gateway; ${offlineServers} offline.`;
 }
 
 function createPlatformChannel(
@@ -129,9 +147,7 @@ export function buildIntegrationSnapshot(
       'mcp-gateway',
       'MCP Gateway',
       aggregateMcpStatus(mcpServers),
-      mcpServers.length > 0
-        ? `${mcpServers.length} server(s) reachable through the gateway.`
-        : 'No MCP servers responded yet.'
+      describeMcpGateway(mcpServers)
     ),
     createPlatformChannel('telegram', config.platforms.telegram, telegramState),
     createPlatformChannel('discord', config.platforms.discord),
