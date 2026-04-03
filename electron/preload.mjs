@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+function readCliArgument(name) {
+  const prefix = `--${name}=`;
+  const match = process.argv.find((entry) => entry.startsWith(prefix));
+  return match ? match.slice(prefix.length) : null;
+}
+
 const backendPort = process.env.GRAVITY_CLAW_PORT?.trim() || process.env.PORT?.trim() || '5187';
-const apiBase = process.env.GRAVITY_CLAW_API_BASE?.trim() || `http://127.0.0.1:${backendPort}`;
+const apiBase =
+  readCliArgument('gravity-claw-api-base') ??
+  process.env.GRAVITY_CLAW_API_BASE?.trim() ??
+  `http://127.0.0.1:${backendPort}`;
 
 contextBridge.exposeInMainWorld('gravityClawDesktop', {
   auth: {

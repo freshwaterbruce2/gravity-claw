@@ -53,7 +53,9 @@ const KIMI_API_BASE = 'https://api.moonshot.ai/v1';
 const MAX_TOOL_ROUNDS = 30;
 const MAX_HISTORY_CHARS = 3_200_000; // ~800K tokens, leaves headroom for system prompt + response
 const MAX_SINGLE_MESSAGE_CHARS = 200_000;
-const PREFERRED_PORT = Number(process.env.GRAVITY_CLAW_PORT ?? process.env.PORT ?? 5178);
+const preferredPortValue = Number(process.env.GRAVITY_CLAW_PORT ?? process.env.PORT ?? 5187);
+const PREFERRED_PORT =
+  Number.isInteger(preferredPortValue) && preferredPortValue > 0 ? preferredPortValue : 5187;
 const PORT_FILE = path.resolve(__dirname, '..', '..', '.server-port');
 const MCP_GATEWAY_PORT = 3100;
 const WORKSPACE_ROOT = path.resolve(process.cwd(), '..', '..');
@@ -685,7 +687,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status: 'ok',
     service: 'gravity-claw',
-    model: DEFAULT_MODEL,
+    name: appConfig.name,
+    model: appConfig.model,
     tools: geminiFunctionTool?.functionDeclarations.length || 0,
     memoryEnabled: appConfig.memoryEnabled,
     directShellEnabled: appConfig.directShellEnabled,

@@ -13,12 +13,12 @@
     "desktop:dev": "node scripts/start-desktop-dev.mjs",
     "build": "pnpm run typecheck && pnpm run typecheck:server && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test src/lib/runtime.test.ts server/src/config.test.ts server/src/mcp-status.test.ts",
+    "test": "node --import tsx --test src/lib/runtime.test.ts server/src/config.test.ts server/src/mcp-status.test.ts scripts/runtime-paths.test.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint src --ext ts,tsx",
     "self-improve": "powershell -ExecutionPolicy Bypass -File scripts/apply-improvement.ps1",
-    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:5187/api/inngest"
+    "inngest:dev": "node scripts/start-inngest-dev.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

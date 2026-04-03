@@ -4,10 +4,11 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  getPreferredBackendPort,
   getNodeExecutable,
+  readBackendPortFromFile,
   getWorkspaceToolPath,
-  waitForPort,
-  waitForProcessPort,
+  waitForBackendPort,
 } from '../scripts/runtime-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -18,12 +19,13 @@ const APP_PROTOCOL_ORIGIN = `${APP_PROTOCOL}://${APP_PROTOCOL_HOST}`;
 const PRELOAD_PATH = path.join(__dirname, 'preload.mjs');
 const DIST_INDEX_PATH = path.join(APP_ROOT, 'dist', 'index.html');
 const DIST_ROOT = path.join(APP_ROOT, 'dist');
-const BACKEND_PORT = Number(process.env.GRAVITY_CLAW_PORT ?? process.env.PORT ?? 5187);
+const BACKEND_PORT = getPreferredBackendPort();
 const RENDERER_URL = process.env.GRAVITY_CLAW_RENDERER_URL?.trim() || null;
 const SERVER_ENTRY = path.join(APP_ROOT, 'server', 'src', 'index.ts');
 
 let mainWindow = null;
 let backendProcess = null;
+let activeBackendPort = BACKEND_PORT;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -114,10 +116,24 @@ async function isBackendHealthy(port = BACKEND_PORT) {
   }
 }
 
+async function findHealthyBackendPort() {
+  const filePort = readBackendPortFromFile(APP_ROOT);
+  const candidatePorts = [...new Set([filePort, BACKEND_PORT].filter(Boolean))];
+
+  for (const port of candidatePorts) {
+    if (await isBackendHealthy(port)) {
+      return port;
+    }
+  }
+
+  return null;
+}
+
 async function ensureBackendServer() {
-  const alreadyRunning = await isBackendHealthy();
-  if (alreadyRunning) {
-    return;
+  const existingPort = await findHealthyBackendPort();
+  if (existingPort) {
+    activeBackendPort = existingPort;
+    return existingPort;
   }
 
   const nodeExecutable = getNodeExecutable();
@@ -126,7 +142,10 @@ async function ensureBackendServer() {
 
   backendProcess = spawn(nodeExecutable, [tsxCli, SERVER_ENTRY], {
     cwd: APP_ROOT,
-    env: process.env,
+    env: {
+      ...process.env,
+      GRAVITY_CLAW_PORT: String(BACKEND_PORT),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -139,17 +158,20 @@ async function ensureBackendServer() {
   });
 
   try {
-    await waitForProcessPort({
+    activeBackendPort = await waitForBackendPort({
+      appRoot: APP_ROOT,
       childProcess: backendProcess,
-      port: BACKEND_PORT,
+      preferredPort: BACKEND_PORT,
       timeoutMs: 15_000,
       label: 'Gravity-Claw backend',
     });
 
     const startedHealthyAt = Date.now();
-    while (!(await isBackendHealthy())) {
+    while (!(await isBackendHealthy(activeBackendPort))) {
       if (Date.now() - startedHealthyAt >= 15_000) {
-        throw new Error(`Gravity-Claw backend did not become healthy on port ${BACKEND_PORT}.`);
+        throw new Error(
+          `Gravity-Claw backend did not become healthy on port ${activeBackendPort}.`
+        );
       }
 
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -162,6 +184,8 @@ async function ensureBackendServer() {
 
     throw error;
   }
+
+  return activeBackendPort;
 }
 
 function resolveAppAssetPath(requestUrl) {
@@ -188,7 +212,10 @@ function registerAppProtocol() {
 }
 
 async function createMainWindow() {
-  await ensureBackendServer();
+  const backendPort = await ensureBackendServer();
+  const backendApiBase = `http://127.0.0.1:${backendPort}`;
+  process.env.GRAVITY_CLAW_PORT = String(backendPort);
+  process.env.GRAVITY_CLAW_API_BASE = backendApiBase;
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -202,6 +229,7 @@ async function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      additionalArguments: [`--gravity-claw-api-base=${backendApiBase}`],
     },
   });
 

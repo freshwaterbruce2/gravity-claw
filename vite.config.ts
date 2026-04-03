@@ -7,9 +7,17 @@ function discoverBackendPort(): number {
   const portFile = path.resolve(__dirname, '.server-port');
   try {
     const port = Number(fs.readFileSync(portFile, 'utf8').trim());
-    if (port > 0) return port;
+    if (port > 0) {
+      return port;
+    }
   } catch {}
-  return Number(process.env.GRAVITY_CLAW_PORT ?? 5178);
+
+  const fallbackPort = Number(process.env.GRAVITY_CLAW_PORT ?? 5187);
+  return Number.isInteger(fallbackPort) && fallbackPort > 0 ? fallbackPort : 5187;
+}
+
+function resolveBackendTarget(): string {
+  return `http://127.0.0.1:${discoverBackendPort()}`;
 }
 
 export default defineConfig({
@@ -24,8 +32,11 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: `http://127.0.0.1:${discoverBackendPort()}`,
+        target: resolveBackendTarget(),
         changeOrigin: true,
+        bypass(_req, _res, options) {
+          options.target = resolveBackendTarget();
+        },
       },
     },
   },
