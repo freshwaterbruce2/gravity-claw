@@ -1,10 +1,10 @@
 {
-  "model": "kimi-k2.5",
+  "model": "gemini-3.1-pro-preview-customtools",
   "gravityMechanicEnabled": true,
   "memoryEnabled": true,
   "beeMemoryEnabled": true,
   "selfImprovementEnabled": true,
-  "vectorMemoryEnabled": false,
+  "vectorMemoryEnabled": true,
   "directShellEnabled": true,
   "workspaceWatchersEnabled": false,
   "gitPipelineEnabled": true,
