@@ -119,13 +119,13 @@ async function captureExchange(userText: string, agentReply: string): Promise<vo
     query: userText.slice(0, 500),
     response: agentReply.slice(0, 500),
     sourceId: 'gravity-claw',
-  }).catch(() => {});
+  }).catch((err) => { console.warn('[memory] failed to capture episodic exchange:', err); });
 
   if (appConfig.vectorMemoryEnabled) {
     callMemoryTool('memory_add_semantic', {
       text: `User: ${userText.slice(0, 500)}\nAgent: ${agentReply.slice(0, 500)}`,
       category: 'chat-exchange',
-    }).catch(() => {});
+    }).catch((err) => { console.warn('[memory] failed to capture semantic exchange:', err); });
   }
 }
 
@@ -301,7 +301,7 @@ function emitTaskSnapshot(action: string, task?: TaskRecord | null) {
       summary,
       ts: Date.now(),
     });
-  })().catch(() => {});
+  })().catch((err) => { console.warn('[tasks] failed to emit task snapshot:', err); });
 }
 
 function emitConfigSnapshot() {
@@ -408,8 +408,8 @@ async function refreshMcpTools(retries = 0) {
 await ensureMcpGateway();
 await refreshMcpTools();
 if (appConfig.memoryEnabled) {
-  refreshMemoryContext().catch(() => {});
-  callMemoryTool('memory_set_context', { project: 'gravity-claw', status: 'online' }).catch(() => {});
+  refreshMemoryContext().catch((err) => { console.warn('[memory] startup context refresh failed:', err); });
+  callMemoryTool('memory_set_context', { project: 'gravity-claw', status: 'online' }).catch((err) => { console.warn('[memory] startup set_context failed:', err); });
 }
 lastMcpHealth = await fetchMcpHealth();
 emitConfigSnapshot();
@@ -664,7 +664,7 @@ function trimHistory(messages: { role: string; content: string }[]): { role: str
       callMemoryTool('memory_add_semantic', {
         text: `Trimmed ${dropped} message(s) from gravity-claw chat history due to context limits.`,
         category: 'trimmed-history',
-      }).catch(() => {});
+      }).catch((err) => { console.warn('[memory] failed to log history trim:', err); });
     }
 
     trimmed.unshift({
@@ -716,7 +716,7 @@ app.put('/api/config', async (c) => {
   appConfig = await updateGravityClawConfig(body);
   rebuildMcpToolRegistry();
   if (appConfig.memoryEnabled) {
-    refreshMemoryContext().catch(() => {});
+    refreshMemoryContext().catch((err) => { console.warn('[memory] config-update context refresh failed:', err); });
   } else {
     memoryContext = '';
   }
@@ -1003,7 +1003,7 @@ async function handleKimiChat(
 
     // No tool calls — final text response
     const kimiReply = assistantMsg.content || '(no response)';
-    captureExchange(messages[messages.length - 1]?.content ?? '', kimiReply).catch(() => {});
+    captureExchange(messages[messages.length - 1]?.content ?? '', kimiReply).catch((err) => { console.warn('[memory] captureExchange failed:', err); });
     await writer.write(kimiReply);
     return;
   }
@@ -1091,7 +1091,7 @@ app.post('/api/chat', async (c) => {
         if (modelId !== resolvedModel) {
           console.log(`  ⚡ Fell back from ${resolvedModel} to ${modelId}`);
         }
-        captureExchange(lastMessage.content, finalReply).catch(() => {});
+        captureExchange(lastMessage.content, finalReply).catch((err) => { console.warn('[memory] captureExchange failed:', err); });
         await writer.write(finalReply);
         return;
       } catch (err: unknown) {
@@ -1149,6 +1149,7 @@ app.get('/api/stream', (c) => {
     }
 
     const handler = (event: { kind: string; data: unknown; ts: number }) => {
+      // Silent catch: SSE write fails when client disconnects — expected, non-fatal
       sseStream
         .writeSSE({ event: event.kind, data: JSON.stringify(event.data), id: String(event.ts) })
         .catch(() => {});
@@ -1158,6 +1159,7 @@ app.get('/api/stream', (c) => {
 
     // Keep-alive ping every 30s
     const keepAlive = setInterval(() => {
+      // Silent catch: SSE write fails when client disconnects — expected, non-fatal
       sseStream.writeSSE({ event: 'ping', data: '', id: String(Date.now()) }).catch(() => {});
     }, 30_000);
 
@@ -1202,6 +1204,7 @@ function writePortFile(port: number) {
 }
 
 function cleanupPortFile() {
+  // Silent catch: file may not exist on shutdown — expected, non-fatal
   try { fs.unlinkSync(PORT_FILE); } catch {}
 }
 
