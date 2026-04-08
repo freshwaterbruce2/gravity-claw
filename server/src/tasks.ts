@@ -145,9 +145,25 @@ export async function createTask(input: TaskInput): Promise<TaskRecord> {
   return { ...task };
 }
 
-function applyStatusTransition(task: TaskRecord, patch: TaskPatch, timestamp: string): TaskRecord {
+export function applyStatusTransition(task: TaskRecord, patch: TaskPatch, timestamp: string): TaskRecord {
   const nextStatus = patch.status ?? task.status;
   const nextProgress = clampProgress(patch.progress, task.progress);
+  const startedAt =
+    nextStatus === 'running'
+      ? task.status === 'running'
+        ? task.startedAt ?? timestamp
+        : timestamp
+      : nextStatus === 'backlog'
+        ? undefined
+        : task.startedAt;
+  const completedAt =
+    nextStatus === 'done'
+      ? task.status === 'done'
+        ? task.completedAt ?? timestamp
+        : timestamp
+      : undefined;
+  const progress =
+    nextStatus === 'done' ? 100 : nextStatus === 'backlog' ? 0 : nextProgress;
 
   return normalizeTask({
     ...task,
@@ -155,10 +171,10 @@ function applyStatusTransition(task: TaskRecord, patch: TaskPatch, timestamp: st
     skill: patch.skill?.trim() || task.skill,
     priority: patch.priority ?? task.priority,
     status: nextStatus,
-    progress: nextStatus === 'done' ? 100 : nextProgress,
+    progress,
     description: patch.description === null ? undefined : patch.description?.trim() || task.description,
-    startedAt: nextStatus === 'running' ? task.startedAt ?? timestamp : task.startedAt,
-    completedAt: nextStatus === 'done' ? task.completedAt ?? timestamp : undefined,
+    startedAt,
+    completedAt,
     updatedAt: timestamp,
   });
 }

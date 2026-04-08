@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   createTask as createTaskOnServer,
+  deleteTaskOnServer,
   fetchTasks,
   normalizeTask,
   saveTasks,
@@ -37,6 +38,36 @@ function generateTaskId(): string {
 
 function normalizeTaskCollection(tasks: Task[]): Task[] {
   return tasks.map((task) => normalizeTask(task));
+}
+
+export function buildMovedTask(task: Task, status: TaskStatus, now = new Date()): Task {
+  if (status === 'backlog') {
+    return normalizeTask({
+      ...task,
+      status,
+      progress: 0,
+      startedAt: null,
+      completedAt: null,
+    });
+  }
+
+  if (status === 'running') {
+    return normalizeTask({
+      ...task,
+      status,
+      progress: task.status === 'running' ? task.progress : 0,
+      startedAt: task.status === 'running' ? task.startedAt ?? now : now,
+      completedAt: null,
+    });
+  }
+
+  return normalizeTask({
+    ...task,
+    status,
+    progress: 100,
+    startedAt: task.startedAt ?? now,
+    completedAt: task.status === 'done' ? task.completedAt ?? now : now,
+  });
 }
 
 export const useTaskStore = create<TaskState>((set, get) => {
@@ -127,12 +158,7 @@ export const useTaskStore = create<TaskState>((set, get) => {
         return;
       }
 
-      const nextTask = normalizeTask({
-        ...current,
-        status,
-        ...(status === 'running' ? { startedAt: current.startedAt ?? new Date(), progress: 0 } : {}),
-        ...(status === 'done' ? { completedAt: new Date(), progress: 100 } : {}),
-      });
+      const nextTask = buildMovedTask(current, status);
 
       const sync = options?.sync ?? true;
       const persisted = sync
@@ -163,7 +189,10 @@ export const useTaskStore = create<TaskState>((set, get) => {
 
     removeTask: async (id, options) => {
       const next = get().tasks.filter((task) => task.id !== id);
-      await commitTasks(next, options?.sync ?? true);
+      if (options?.sync ?? true) {
+        await deleteTaskOnServer(id);
+      }
+      await commitTasks(next, false);
     },
   };
 });

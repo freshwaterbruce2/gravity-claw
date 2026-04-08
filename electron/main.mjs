@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, net, protocol, safeStorage, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -26,6 +26,7 @@ const SERVER_ENTRY = path.join(APP_ROOT, 'server', 'src', 'index.ts');
 let mainWindow = null;
 let backendProcess = null;
 let activeBackendPort = BACKEND_PORT;
+let authSessionCache = { geminiKey: null, kimiKey: null };
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -52,6 +53,61 @@ function createDefaultState() {
   };
 }
 
+function normalizeSecretValue(value) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function cloneAuthState(auth) {
+  return {
+    geminiKey: normalizeSecretValue(auth?.geminiKey),
+    kimiKey: normalizeSecretValue(auth?.kimiKey),
+  };
+}
+
+function encodeAuthSecret(value) {
+  const normalized = normalizeSecretValue(value);
+  if (!normalized || !safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  try {
+    return {
+      encrypted: true,
+      value: safeStorage.encryptString(normalized).toString('base64'),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function decodeAuthSecret(value) {
+  if (typeof value === 'string') {
+    return normalizeSecretValue(value);
+  }
+
+  if (!value || typeof value !== 'object' || typeof value.value !== 'string') {
+    return null;
+  }
+
+  if (value.encrypted !== true) {
+    return normalizeSecretValue(value.value);
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  try {
+    return normalizeSecretValue(safeStorage.decryptString(Buffer.from(value.value, 'base64')));
+  } catch {
+    return null;
+  }
+}
+
+function hasLegacyPlaintextAuth(auth) {
+  return typeof auth?.geminiKey === 'string' || typeof auth?.kimiKey === 'string';
+}
+
 async function readState() {
   const stateFilePath = getStateFilePath();
 
@@ -59,10 +115,10 @@ async function readState() {
     await access(stateFilePath);
     const fileContents = await readFile(stateFilePath, 'utf8');
     const parsed = JSON.parse(fileContents);
-    return {
+    const nextState = {
       auth: {
-        geminiKey: typeof parsed?.auth?.geminiKey === 'string' ? parsed.auth.geminiKey : null,
-        kimiKey: typeof parsed?.auth?.kimiKey === 'string' ? parsed.auth.kimiKey : null,
+        geminiKey: authSessionCache.geminiKey ?? decodeAuthSecret(parsed?.auth?.geminiKey),
+        kimiKey: authSessionCache.kimiKey ?? decodeAuthSecret(parsed?.auth?.kimiKey),
       },
       storage:
         parsed && typeof parsed.storage === 'object' && parsed.storage !== null
@@ -71,16 +127,37 @@ async function readState() {
             )
           : {},
     };
+
+    authSessionCache = cloneAuthState(nextState.auth);
+
+    if (hasLegacyPlaintextAuth(parsed?.auth) && safeStorage.isEncryptionAvailable()) {
+      await writeState(nextState);
+    }
+
+    return nextState;
   } catch {
-    return createDefaultState();
+    return {
+      ...createDefaultState(),
+      auth: cloneAuthState(authSessionCache),
+    };
   }
 }
 
 async function writeState(state) {
   const stateFilePath = getStateFilePath();
+  authSessionCache = cloneAuthState(state.auth);
+
+  const persistedState = {
+    auth: {
+      geminiKey: encodeAuthSecret(state.auth?.geminiKey),
+      kimiKey: encodeAuthSecret(state.auth?.kimiKey),
+    },
+    storage:
+      state && typeof state.storage === 'object' && state.storage !== null ? state.storage : {},
+  };
 
   await mkdir(path.dirname(stateFilePath), { recursive: true });
-  await writeFile(stateFilePath, JSON.stringify(state, null, 2), 'utf8');
+  await writeFile(stateFilePath, JSON.stringify(persistedState, null, 2), 'utf8');
 }
 
 async function updateState(mutator) {

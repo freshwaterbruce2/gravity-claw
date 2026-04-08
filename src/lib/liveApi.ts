@@ -301,6 +301,17 @@ export async function updateTaskOnServer(
   return null;
 }
 
+export async function deleteTaskOnServer(id: string): Promise<boolean> {
+  try {
+    const response = await fetch(buildApiUrl(`/api/tasks/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function saveTasks(tasks: LiveTask[]): Promise<LiveTask[]> {
   try {
     const payload = await requestJson<unknown>('/api/tasks', {
