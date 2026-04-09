@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { mkdtemp, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -110,12 +111,9 @@ test('waitForBackendPort resolves the dynamically written server port', async ()
 
 test('waitForBackendEndpoint resolves the live Inngest serve URL from .server-port', async () => {
   const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-endpoint-'));
-  const server = net.createServer((socket) => {
-    socket.write(
-      'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n' +
-        JSON.stringify({ message: 'Inngest endpoint configured correctly.' })
-    );
-    socket.end();
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: 'Inngest endpoint configured correctly.' }));
   });
 
   await new Promise((resolve, reject) => {

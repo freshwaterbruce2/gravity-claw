@@ -6,6 +6,7 @@ import net from 'node:net';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
 import { serve as serveInngest } from 'inngest/hono';
 import { inngest } from '@vibetech/inngest-client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -33,12 +34,35 @@ import { initTelegramBridge } from './telegram.js';
 
 dotenv.config({ override: true });
 
+// ── Startup Environment Validation ───────────────────────────────────────────
+(function validateRequiredEnv() {
+  const hasGemini = typeof process.env.GEMINI_API_KEY === 'string' && process.env.GEMINI_API_KEY.trim().length > 0;
+  const hasKimi = typeof process.env.KIMI_API_KEY === 'string' && process.env.KIMI_API_KEY.trim().length > 0;
+
+  if (!hasGemini && !hasKimi) {
+    console.error(
+      '[gravity-claw] FATAL: No LLM API key found in environment.\n' +
+      '  Set GEMINI_API_KEY (for Gemini models) or KIMI_API_KEY (for Kimi models),\n' +
+      '  or both. Chat requests will fail without at least one key.\n' +
+      '  Add the key(s) to your .env file and restart the server.',
+    );
+    process.exit(1);
+  }
+
+  if (!hasGemini) {
+    console.warn('[gravity-claw] WARNING: GEMINI_API_KEY is not set. Gemini models will be unavailable; only Kimi models will work.');
+  }
+  if (!hasKimi) {
+    console.warn('[gravity-claw] WARNING: KIMI_API_KEY is not set. Kimi models will be unavailable.');
+  }
+})();
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const PREFERRED_PORT = (() => {
   const v = Number(process.env.GRAVITY_CLAW_PORT ?? process.env.PORT ?? 5187);
   return Number.isInteger(v) && v > 0 ? v : 5187;
 })();
-const PORT_FILE = path.resolve(__dirname, '..', '..', '.server-port');
+const PORT_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.server-port');
 
 state.appConfig = await getGravityClawConfig();
 state.eventBus = createEventBus();
@@ -113,10 +137,16 @@ app.post('/api/tasks', async (c) => {
     typeof source.title !== 'string' || typeof source.skill !== 'string' ||
     !source.priority || !['critical', 'high', 'medium', 'low'].includes(source.priority)
   ) { return c.json({ error: 'title, skill, and priority are required' }, 400); }
-  const task = await createTask({
-    title: source.title, skill: source.skill, priority: source.priority,
-    status: source.status, progress: source.progress, description: source.description,
-  });
+  let task: TaskRecord;
+  try {
+    task = await createTask({
+      title: source.title, skill: source.skill, priority: source.priority,
+      status: source.status, progress: source.progress, description: source.description,
+    });
+  } catch (err: unknown) {
+    console.error('[tasks] createTask failed:', err);
+    return c.json({ error: 'Failed to persist task' }, 500);
+  }
   emitTaskSnapshot('created', task);
   const [tasks, summary] = await Promise.all([listTasks(), summarizeTasks()]);
   return c.json({ task, tasks, summary }, 201);
@@ -126,18 +156,31 @@ app.put('/api/tasks', async (c) => {
   let body: Partial<TaskPatch> & { id?: string; tasks?: TaskRecord[] };
   try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
   if (Array.isArray(body.tasks)) {
-    const tasks = await replaceTasks(body.tasks);
-    const summary = await summarizeTasks();
+    let tasks: TaskRecord[];
+    let summary;
+    try {
+      tasks = await replaceTasks(body.tasks);
+      summary = await summarizeTasks();
+    } catch (err: unknown) {
+      console.error('[tasks] replaceTasks failed:', err);
+      return c.json({ error: 'Failed to persist tasks' }, 500);
+    }
     state.eventBus.emit('task.update', { action: 'replaced', task: null, tasks, summary, ts: Date.now() });
     return c.json({ tasks, summary });
   }
   if (typeof body.id !== 'string' || body.id.trim() === '') {
     return c.json({ error: 'Task id is required' }, 400);
   }
-  const updated = await updateTask(body.id.trim(), {
-    title: body.title, skill: body.skill, priority: body.priority,
-    status: body.status, progress: body.progress, description: body.description,
-  });
+  let updated: TaskRecord | null;
+  try {
+    updated = await updateTask(body.id.trim(), {
+      title: body.title, skill: body.skill, priority: body.priority,
+      status: body.status, progress: body.progress, description: body.description,
+    });
+  } catch (err: unknown) {
+    console.error('[tasks] updateTask failed:', err);
+    return c.json({ error: 'Failed to persist task update' }, 500);
+  }
   if (!updated) return c.json({ error: 'Task not found' }, 404);
   emitTaskSnapshot('updated', updated);
   const [tasks, summary] = await Promise.all([listTasks(), summarizeTasks()]);
@@ -150,7 +193,13 @@ app.delete('/api/tasks/:id', async (c) => {
     return c.json({ error: 'Task id is required' }, 400);
   }
 
-  const removed = await removeTask(taskId);
+  let removed: TaskRecord | null;
+  try {
+    removed = await removeTask(taskId);
+  } catch (err: unknown) {
+    console.error('[tasks] removeTask failed:', err);
+    return c.json({ error: 'Failed to persist task removal' }, 500);
+  }
   if (!removed) {
     return c.json({ error: 'Task not found' }, 404);
   }
@@ -261,8 +310,11 @@ app.get('/api/models', (c) => c.json({
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'google' },
     { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'google' },
     { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', provider: 'google' },
-    { id: 'kimi-k2.5', label: 'Kimi K2.5 (1T MoE)', provider: 'moonshot' },
-    { id: 'kimi-k2.5-thinking', label: 'Kimi K2.5 Thinking', provider: 'moonshot' },
+    { id: 'kimi-k2.5', label: 'Kimi K2.5 (256k, multimodal)', provider: 'moonshot' },
+    { id: 'kimi-k2-thinking', label: 'Kimi K2 Thinking (deep reasoning)', provider: 'moonshot' },
+    { id: 'kimi-k2-thinking-turbo', label: 'Kimi K2 Thinking Turbo (fast)', provider: 'moonshot' },
+    { id: 'kimi-k2-turbo-preview', label: 'Kimi K2 Turbo (60 tok/s)', provider: 'moonshot' },
+    { id: 'kimi-k2-0905-preview', label: 'Kimi K2 Sep 2025', provider: 'moonshot' },
   ],
 }));
 

@@ -1,5 +1,6 @@
 {
-  "model": "gemini-3.1-pro-preview-customtools",
+  "name": "G-CLAW-01",
+  "model": "kimi-k2.5",
   "gravityMechanicEnabled": true,
   "memoryEnabled": true,
   "beeMemoryEnabled": true,

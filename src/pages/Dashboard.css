@@ -8,12 +8,10 @@
   grid-template-columns: repeat(12, 1fr);
   grid-template-areas:
     "control control control control control control control control visibility visibility visibility visibility"
-    "workqueue workqueue workqueue workqueue workqueue workqueue integrations integrations integrations integrations visibility visibility"
-    "workqueue workqueue workqueue workqueue workqueue workqueue integrations integrations integrations integrations visibility visibility";
+    "workqueue workqueue workqueue workqueue workqueue integrations integrations integrations visibility visibility visibility visibility"
+    "workqueue workqueue workqueue workqueue workqueue integrations integrations integrations visibility visibility visibility visibility";
   gap: var(--bento-gap);
   padding: var(--sp-5);
-  overflow-y: auto;
-  height: 100%;
 }
 
 .bento-control { grid-area: control; }

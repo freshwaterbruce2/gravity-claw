@@ -36,7 +36,7 @@ function createStorage(): Storage {
 
 function setWindowStorage(storage: Storage): void {
   (
-    globalThis as typeof globalThis & {
+    globalThis as unknown as {
       window?: { localStorage: Storage; gravityClawDesktop?: undefined };
     }
   ).window = {
@@ -46,7 +46,7 @@ function setWindowStorage(storage: Storage): void {
 
 function clearWindowStorage(): void {
   delete (
-    globalThis as typeof globalThis & {
+    globalThis as unknown as {
       window?: unknown;
     }
   ).window;

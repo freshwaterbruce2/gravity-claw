@@ -57,10 +57,6 @@ export default function Chat() {
 
   const isKimiModel = model.startsWith('kimi-');
   const needsKey = isKimiModel ? !kimiKey : !geminiKey;
-  const handleClearMessages = () => clearMessages();
-  const handleSendClick = () => {
-    void handleSend();
-  };
 
   return (
     <div className="chat-page">
@@ -123,7 +119,7 @@ export default function Chat() {
 
       {/* Input Bar */}
       <div className="chat-input-bar">
-        <button className="btn btn-ghost chat-clear-btn" onClick={handleClearMessages} title="Clear chat">
+        <button className="btn btn-ghost chat-clear-btn" onClick={clearMessages} title="Clear chat">
           ✕
         </button>
         <input
@@ -144,7 +140,7 @@ export default function Chat() {
         />
         <button
           className="btn btn-primary chat-send-btn"
-          onClick={handleSendClick}
+          onClick={() => void handleSend()}
           disabled={!input.trim() || isTyping || needsKey}
         >
           SEND ▶

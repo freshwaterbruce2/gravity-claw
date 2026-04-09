@@ -39,7 +39,9 @@
     },
     "start:full": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "command": "pnpm run start:full",
         "cwd": "apps/gravity-claw"
@@ -48,7 +50,9 @@
     },
     "desktop": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "command": "pnpm run desktop",
         "cwd": "apps/gravity-claw"
@@ -65,7 +69,9 @@
     },
     "build": {
       "executor": "nx:run-commands",
-      "outputs": ["{projectRoot}/dist"],
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
       "cache": true,
       "options": {
         "command": "pnpm run build",
@@ -106,13 +112,20 @@
     },
     "preview": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "command": "pnpm run preview",
         "cwd": "apps/gravity-claw"
       },
       "cache": false
-    }
+    },
+    "quality": {}
   },
-    "tags": ["scope:gravity", "type:application", "platform:desktop"]
+  "tags": [
+    "scope:gravity",
+    "type:application",
+    "platform:desktop"
+  ]
 }
