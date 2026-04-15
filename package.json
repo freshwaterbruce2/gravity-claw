@@ -1,6 +1,9 @@
 {
   "name": "gravity-claw",
   "version": "0.1.0",
+  "description": "AI agent orchestrator desktop application",
+  "author": "Bruce Freshwater",
+  "main": "electron/main.mjs",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,15 +21,18 @@
     "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint src --ext ts,tsx",
     "self-improve": "powershell -ExecutionPolicy Bypass -File scripts/apply-improvement.ps1",
-    "inngest:dev": "node scripts/start-inngest-dev.mjs"
+    "inngest:dev": "node scripts/start-inngest-dev.mjs",
+    "build:server": "node scripts/bundle-server.mjs",
+    "build:electron": "pnpm run build && pnpm run build:server && electron-builder --win --config electron-builder.config.cjs",
+    "dist": "electron-builder --win --config electron-builder.config.cjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@hono/node-server": "^1.13.7",
+    "@vibetech/inngest-client": "workspace:*",
     "dotenv": "^16.4.7",
     "hono": "^4.7.7",
     "inngest": "^3.52.7",
-    "@vibetech/inngest-client": "workspace:*",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "telegraf": "^4.16.3",
@@ -39,6 +45,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^9.1.2",
     "electron": "40.1.0",
+    "electron-builder": "^26.8.1",
     "tsx": "^4.19.2",
     "typescript": "5.9.3",
     "vite": "^7.3.1"

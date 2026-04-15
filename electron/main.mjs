@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain, net, protocol, safeStorage, shell } from 'electron';
-import { spawn } from 'node:child_process';
+import { app, BrowserWindow, ipcMain, protocol, safeStorage, shell } from 'electron';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import {
   getPreferredBackendPort,
   getNodeExecutable,
@@ -21,7 +22,47 @@ const DIST_INDEX_PATH = path.join(APP_ROOT, 'dist', 'index.html');
 const DIST_ROOT = path.join(APP_ROOT, 'dist');
 const BACKEND_PORT = getPreferredBackendPort();
 const RENDERER_URL = process.env.GRAVITY_CLAW_RENDERER_URL?.trim() || null;
-const SERVER_ENTRY = path.join(APP_ROOT, 'server', 'src', 'index.ts');
+
+// When packaged, the server is a pre-bundled CJS file in process.resourcesPath.
+// In dev, we run the TypeScript source directly via tsx from the app root.
+const RESOURCES_PATH = app.isPackaged ? process.resourcesPath : APP_ROOT;
+const SERVER_ENTRY = app.isPackaged
+  ? path.join(process.resourcesPath, 'server', 'dist', 'bundle.mjs')
+  : path.join(APP_ROOT, 'server', 'src', 'index.ts');
+
+// GUI apps launched from the desktop don't inherit the shell PATH, so
+// 'node.exe' won't resolve. Walk common locations to find the real binary.
+function resolveNodeExe() {
+  if (process.env.GRAVITY_CLAW_NODE_PATH) return process.env.GRAVITY_CLAW_NODE_PATH;
+  if (process.env.npm_node_execpath) return process.env.npm_node_execpath;
+
+  // Ask the OS — works if node is in the system-level PATH (HKLM env)
+  try {
+    const r = spawnSync('where.exe', ['node.exe'], { encoding: 'utf8', timeout: 3000 });
+    if (r.status === 0) {
+      const first = r.stdout.trim().split(/\r?\n/)[0].trim();
+      if (first) return first;
+    }
+  } catch { /* ignore */ }
+
+  // Common fixed install locations on Windows
+  const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+  const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+  const appdata = process.env.APPDATA || '';
+  const home = process.env.USERPROFILE || '';
+  const candidates = [
+    path.join(pf, 'nodejs', 'node.exe'),
+    path.join(pf86, 'nodejs', 'node.exe'),
+    path.join(appdata, 'nvm', 'current', 'node.exe'),
+    path.join(home, '.nvm', 'current', 'node.exe'),
+    path.join(home, 'scoop', 'shims', 'node.exe'),
+  ];
+  for (const c of candidates) {
+    if (c && existsSync(c)) return c;
+  }
+
+  return getNodeExecutable(); // last resort — may still fail
+}
 
 let mainWindow = null;
 let backendProcess = null;
@@ -194,7 +235,7 @@ async function isBackendHealthy(port = BACKEND_PORT) {
 }
 
 async function findHealthyBackendPort() {
-  const filePort = readBackendPortFromFile(APP_ROOT);
+  const filePort = readBackendPortFromFile(RESOURCES_PATH);
   const candidatePorts = [...new Set([filePort, BACKEND_PORT].filter(Boolean))];
 
   for (const port of candidatePorts) {
@@ -213,15 +254,23 @@ async function ensureBackendServer() {
     return existingPort;
   }
 
-  const nodeExecutable = getNodeExecutable();
-  const tsxCli = getWorkspaceToolPath(APP_ROOT, 'tsx', 'dist', 'cli.mjs');
+  const nodeExecutable = resolveNodeExe();
+  // Packaged: SERVER_ENTRY is a pre-bundled ESM bundle — run directly with node.
+  // Dev: SERVER_ENTRY is TypeScript source — needs tsx to transpile.
+  const spawnArgs = app.isPackaged
+    ? [SERVER_ENTRY]
+    : [getWorkspaceToolPath(APP_ROOT, 'tsx', 'dist', 'cli.mjs'), SERVER_ENTRY];
   const outputBuffer = createOutputBuffer();
 
-  backendProcess = spawn(nodeExecutable, [tsxCli, SERVER_ENTRY], {
-    cwd: APP_ROOT,
+  backendProcess = spawn(nodeExecutable, spawnArgs, {
+    cwd: RESOURCES_PATH,
     env: {
       ...process.env,
       GRAVITY_CLAW_PORT: String(BACKEND_PORT),
+      // In packaged mode, write the config to user data so it survives updates
+      ...(app.isPackaged && {
+        GRAVITY_CLAW_CONFIG_PATH: path.join(app.getPath('userData'), '.gravity-claw.config.json'),
+      }),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -236,7 +285,7 @@ async function ensureBackendServer() {
 
   try {
     activeBackendPort = await waitForBackendPort({
-      appRoot: APP_ROOT,
+      appRoot: RESOURCES_PATH,
       childProcess: backendProcess,
       preferredPort: BACKEND_PORT,
       timeoutMs: 15_000,
@@ -281,10 +330,45 @@ function resolveAppAssetPath(requestUrl) {
   return hasExtension ? candidatePath : DIST_INDEX_PATH;
 }
 
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+};
+
 function registerAppProtocol() {
-  protocol.handle(APP_PROTOCOL, (request) => {
+  // net.fetch uses Chromium's network stack which cannot read from inside an
+  // asar archive. Use Node.js readFile (asar-aware) instead and wrap the
+  // result in a Response so protocol.handle is satisfied.
+  protocol.handle(APP_PROTOCOL, async (request) => {
     const filePath = resolveAppAssetPath(request.url);
-    return net.fetch(pathToFileURL(filePath).toString());
+    try {
+      const data = await readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      return new Response(data, { headers: { 'Content-Type': contentType } });
+    } catch {
+      // Fall back to index.html so the SPA router can handle unknown paths
+      try {
+        const data = await readFile(DIST_INDEX_PATH);
+        return new Response(data, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      } catch {
+        return new Response('Not Found', { status: 404 });
+      }
+    }
   });
 }
 
