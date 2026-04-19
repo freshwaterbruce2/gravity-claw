@@ -27,6 +27,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    // Desktop Electron app — 500 kB web threshold doesn't apply; raise to match reality
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-zustand': ['zustand'],
+        },
+      },
+    },
+  },
   server: {
     port: 5177,
     host: true,
