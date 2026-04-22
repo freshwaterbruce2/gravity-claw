@@ -16,7 +16,7 @@
     "desktop:dev": "node scripts/start-desktop-dev.mjs",
     "build": "pnpm run typecheck && pnpm run typecheck:server && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test src/lib/runtime.test.ts src/lib/authBridge.test.ts src/stores/taskStore.test.ts server/src/config.test.ts server/src/mcp-status.test.ts server/src/tasks.test.ts scripts/runtime-paths.test.mjs",
+    "test": "node --import tsx --test src/lib/runtime.test.ts src/lib/authBridge.test.ts src/stores/taskStore.test.ts server/src/config.test.ts server/src/mcp-status.test.ts server/src/tasks.test.ts server/src/telegram.test.ts server/src/tool-registry.test.ts scripts/runtime-paths.test.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint src --ext ts,tsx",
