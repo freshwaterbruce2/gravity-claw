@@ -1,0 +1,107 @@
+name: Gravity Claw Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g., 0.3.0)'
+        required: true
+        type: string
+      draft:
+        description: 'Create as draft release'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bump version
+        shell: pwsh
+        run: |
+          ..\..\scripts\bump-app-version.ps1 -App "gravity-claw" -Version "${{ inputs.version }}"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): gravity-claw v${{ inputs.version }}"
+          git tag "gravity-claw@v${{ inputs.version }}"
+          git push origin HEAD --follow-tags
+
+      - name: Build Tauri app
+        run: pnpm run build:desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Find installer
+        id: installer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri\target\release\bundle\nsis\*.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) {
+            $exe = Get-ChildItem src-tauri\target\release\bundle\msi\*.msi -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $exe) {
+            throw "No installer found in src-tauri/target/release/bundle/"
+          }
+          echo "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Generate changelog excerpt
+        id: changelog
+        shell: pwsh
+        run: |
+          $tag = git describe --tags --abbrev=0 HEAD^ 2>$null
+          if ($tag) {
+            $log = git log --pretty=format:"- %s" "$tag..HEAD" | Out-String
+          } else {
+            $log = git log --pretty=format:"- %s" | Out-String
+          }
+          $log = $log -replace '"', '\"'
+          echo "body<<EOF" >> $env:GITHUB_OUTPUT
+          echo "$log" >> $env:GITHUB_OUTPUT
+          echo "EOF" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gravity-claw@v${{ inputs.version }}
+          name: Gravity Claw v${{ inputs.version }}
+          body: |
+            ## Changes
+            ${{ steps.changelog.outputs.body }}
+
+            ## Install
+            Download the `.exe` installer and run it.
+          draft: ${{ inputs.draft }}
+          prerelease: false
+          files: |
+            ${{ steps.installer.outputs.path }}
