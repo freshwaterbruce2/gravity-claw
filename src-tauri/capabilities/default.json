@@ -3,31 +3,6 @@
   "description": "Default capability for the main window",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "shell:allow-open",
-    "shell:allow-execute",
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "node",
-          "cmd": "node",
-          "args": [{ "validator": ".*" }],
-          "sidecar": false
-        },
-        {
-          "name": "node-exe",
-          "cmd": "node.exe",
-          "args": [{ "validator": ".*" }],
-          "sidecar": false
-        }
-      ]
-    },
-    "store:default",
-    "store:allow-get",
-    "store:allow-set",
-    "store:allow-delete",
-    "store:allow-save",
-    "store:allow-load"
+    "core:default"
   ]
 }

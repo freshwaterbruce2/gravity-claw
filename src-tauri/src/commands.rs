@@ -4,12 +4,13 @@
 //! auth session and generic key-value storage.
 
 use serde_json::Value;
-use tauri::{command, AppHandle, Manager};
+use std::sync::Arc;
+use tauri::{command, AppHandle};
 use tauri_plugin_store::StoreExt;
 
 const STORE_PATH: &str = "gravity-claw-state.json";
 
-fn get_store(app: &AppHandle) -> Result<tauri_plugin_store::Store<tauri::Wry>, String> {
+fn get_store(app: &AppHandle) -> Result<Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
     app.store(STORE_PATH)
         .map_err(|e| format!("Failed to open store: {}", e))
 }
@@ -89,10 +90,7 @@ pub async fn storage_get_item(app: AppHandle, key: String) -> Result<Option<Stri
 #[command]
 pub async fn storage_set_item(app: AppHandle, key: String, value: String) -> Result<(), String> {
     let store = get_store(&app)?;
-    store.set(
-        &format!("storage.{}", key),
-        Value::String(value),
-    );
+    store.set(&format!("storage.{}", key), Value::String(value));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -108,7 +106,9 @@ pub async fn storage_remove_item(app: AppHandle, key: String) -> Result<(), Stri
 
 /// Returns the backend API base URL the frontend should use.
 #[command]
-pub async fn runtime_api_base(state: tauri::State<'_, crate::BackendState>) -> Result<String, String> {
+pub async fn runtime_api_base(
+    state: tauri::State<'_, crate::BackendState>,
+) -> Result<String, String> {
     let port = state.port.lock().await;
     Ok(format!("http://127.0.0.1:{}", *port))
 }

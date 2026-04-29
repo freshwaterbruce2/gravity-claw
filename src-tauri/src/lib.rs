@@ -9,8 +9,8 @@
 mod commands;
 
 use commands::{
-    auth_clear_session, auth_get_session, auth_set_gemini_key, auth_set_kimi_key,
-    runtime_api_base, storage_get_item, storage_remove_item, storage_set_item,
+    auth_clear_session, auth_get_session, auth_set_gemini_key, auth_set_kimi_key, runtime_api_base,
+    storage_get_item, storage_remove_item, storage_set_item,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -185,7 +185,12 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
         // In dev mode we need tsx to transpile TypeScript.
         let workspace_root = app_root.parent().and_then(|p| p.parent());
         let tsx_cli = workspace_root
-            .map(|r| r.join("node_modules").join("tsx").join("dist").join("cli.mjs"))
+            .map(|r| {
+                r.join("node_modules")
+                    .join("tsx")
+                    .join("dist")
+                    .join("cli.mjs")
+            })
             .filter(|p| p.exists());
 
         if let Some(tsx) = tsx_cli {
@@ -203,16 +208,21 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
         .args(&spawn_args)
         .current_dir(app_root)
         .env("GRAVITY_CLAW_PORT", DEFAULT_BACKEND_PORT.to_string())
-        .env("GRAVITY_CLAW_CONFIG_PATH", app_root.join(".gravity-claw.config.json").to_string_lossy().to_string())
+        .env(
+            "GRAVITY_CLAW_CONFIG_PATH",
+            app_root
+                .join(".gravity-claw.config.json")
+                .to_string_lossy()
+                .to_string(),
+        )
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn backend: {}", e))?;
 
     // Capture last lines of output for diagnostics.
-    let mut output_buffer = String::new();
     if let Some(stdout) = child.stdout.take() {
-        let mut reader = tokio::io::BufReader::new(stdout);
+        let reader = tokio::io::BufReader::new(stdout);
         let buf = Arc::new(Mutex::new(String::new()));
         let buf_clone = buf.clone();
         tokio::spawn(async move {
@@ -223,7 +233,8 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
                 b.push_str(&line);
                 b.push('\n');
                 if b.len() > 6_000 {
-                    *b = b.split_off(b.len() - 6_000);
+                    let keep_from = b.len() - 6_000;
+                    *b = b.split_off(keep_from);
                 }
             }
         });
@@ -288,7 +299,7 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
         sleep(Duration::from_millis(BACKEND_POLL_INTERVAL_MS)).await;
     }
 
-    Ok((child, active_port))
+    Ok((Some(child), active_port))
 }
 
 pub fn run() {
@@ -297,11 +308,11 @@ pub fn run() {
             process: Mutex::new(None),
             port: Mutex::new(DEFAULT_BACKEND_PORT),
         })
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             let handle = app.handle().clone();
-            let app_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let app_root =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
             // Spawn backend in a non-blocking task so the window can open immediately.
             tauri::async_runtime::spawn(async move {
