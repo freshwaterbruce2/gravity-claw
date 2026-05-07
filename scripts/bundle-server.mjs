@@ -1,10 +1,11 @@
 /**
- * Bundles the Gravity Claw backend server into a single self-contained ESM
- * file (bundle.mjs) for packaging. This avoids runtime dependency on workspace
- * node_modules which are not accessible to spawned child processes in the
- * packaged Electron app (workspace-root node_modules are not bundled by
- * electron-builder, and app-local node_modules inside app.asar are opaque to
- * child processes).
+ * Bundles the Gravity Claw backend server into a single ESM file (bundle.mjs)
+ * for packaging. Core server dependencies are bundled so spawned child
+ * processes do not rely on workspace-root node_modules.
+ *
+ * The Telegram bridge is intentionally runtime-optional. If `telegraf` is not
+ * available beside the packaged server, the bridge disables itself and the rest
+ * of the backend remains usable.
  */
 import { build } from 'esbuild';
 import fs from 'node:fs';

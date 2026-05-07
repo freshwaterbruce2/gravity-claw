@@ -1,10 +1,12 @@
-import { Telegraf } from 'telegraf';
+import { createRequire } from 'node:module';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { setTelegramBridgeStatus } from './integrations.js';
 import { setHeartbeatDeps } from './inngest-functions.js';
 import { emitIntegrationSnapshot } from './emitters.js';
 import { sendWithFallback, DEFAULT_MODEL } from './gemini.js';
 import { state } from './state.js';
+
+const requireModule = createRequire(import.meta.url);
 
 export function parseAllowedTelegramUserIds(
   rawValue = process.env.TELEGRAM_ALLOWED_USER_IDS,
@@ -33,6 +35,24 @@ export interface TelegramTextContext {
   reply: (text: string) => Promise<unknown>;
 }
 
+export interface TelegramBotLike {
+  telegram: {
+    sendMessage: (chatId: string, text: string) => Promise<unknown>;
+  };
+  on: (event: 'text', handler: (ctx: TelegramTextContext) => Promise<void>) => void;
+  catch: (handler: (err: unknown) => void) => void;
+  launch: (options: { dropPendingUpdates: boolean }, onLaunch: () => void) => Promise<void>;
+  stop: (reason: 'SIGINT' | 'SIGTERM') => void;
+}
+
+interface TelegrafModule {
+  Telegraf: new (token: string, options: { handlerTimeout: number }) => TelegramBotLike;
+}
+
+type TelegrafLoadResult =
+  | { ok: true; Telegraf: TelegrafModule['Telegraf'] }
+  | { ok: false; details: string };
+
 export interface TelegramHandlerDeps {
   allowedUserIds: number[];
   genAI: GoogleGenerativeAI;
@@ -44,11 +64,15 @@ export async function handleTelegramText(
   deps: TelegramHandlerDeps,
 ): Promise<void> {
   if (!isTelegramUserAllowed(ctx.from?.id, deps.allowedUserIds)) {
-    console.log(`\n  🚫 Rejected message from unauthorized user: ${ctx.from?.id} (${ctx.from?.username || ctx.from?.first_name})`);
+    console.log(
+      `\n  🚫 Rejected message from unauthorized user: ${ctx.from?.id} (${ctx.from?.username || ctx.from?.first_name})`,
+    );
     return;
   }
   const preview = ctx.message.text.substring(0, 50);
-  console.log(`\n  📩 Received message from ${ctx.from?.username || ctx.from?.first_name}: ${preview}...`);
+  console.log(
+    `\n  📩 Received message from ${ctx.from?.username || ctx.from?.first_name}: ${preview}...`,
+  );
   try {
     await ctx.sendChatAction('typing');
     const reply = await deps.sendWithFallback(deps.genAI, ctx.message.text);
@@ -70,20 +94,49 @@ export async function handleTelegramText(
   }
 }
 
+function describeDependencyLoadError(err: unknown): string {
+  if (err instanceof Error) {
+    const code = 'code' in err ? String(err.code) : 'unknown';
+    return `${code}: ${err.message}`;
+  }
+
+  return String(err);
+}
+
+function loadTelegraf(): TelegrafLoadResult {
+  try {
+    const telegrafModule = requireModule('telegraf') as TelegrafModule;
+    if (typeof telegrafModule.Telegraf !== 'function') {
+      return { ok: false, details: 'telegraf module loaded without a Telegraf export.' };
+    }
+
+    return { ok: true, Telegraf: telegrafModule.Telegraf };
+  } catch (err: unknown) {
+    return { ok: false, details: describeDependencyLoadError(err) };
+  }
+}
+
 export function initTelegramBridge(): void {
   const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   const allowedUserIds = parseAllowedTelegramUserIds();
 
   if (!TELEGRAM_TOKEN || !GEMINI_API_KEY) {
-    console.log('\n  ⚠️ Telegram Bridge inactive: Missing TELEGRAM_BOT_TOKEN or GEMINI_API_KEY in .env');
-    setTelegramBridgeStatus({ status: 'disabled', details: 'Telegram bridge credentials are missing.' });
+    console.log(
+      '\n  ⚠️ Telegram Bridge inactive: Missing TELEGRAM_BOT_TOKEN or GEMINI_API_KEY in .env',
+    );
+    setTelegramBridgeStatus({
+      status: 'disabled',
+      details: 'Telegram bridge credentials are missing.',
+    });
     emitIntegrationSnapshot(state.lastMcpHealth);
     return;
   }
 
   if (allowedUserIds.length === 0) {
-    console.log('\n  ⚠️ Telegram Bridge inactive: TELEGRAM_ALLOWED_USER_IDS is required for access control.');
+    console.log(
+      '\n  ⚠️ Telegram Bridge inactive: TELEGRAM_ALLOWED_USER_IDS is required for access control.',
+    );
     setTelegramBridgeStatus({
       status: 'disabled',
       details: 'Telegram bridge access control is not configured.',
@@ -92,11 +145,27 @@ export function initTelegramBridge(): void {
     return;
   }
 
+  const telegrafLoad = loadTelegraf();
+  if (!telegrafLoad.ok) {
+    console.log(
+      `\n  ⚠️ Telegram Bridge inactive: telegraf could not be loaded (${telegrafLoad.details}).`,
+    );
+    setTelegramBridgeStatus({
+      status: 'disabled',
+      details: `Telegram bridge dependency is unavailable: ${telegrafLoad.details}`,
+    });
+    emitIntegrationSnapshot(state.lastMcpHealth);
+    return;
+  }
+
   console.log(`\n  🤖 Initializing Telegram Bridge (${DEFAULT_MODEL})...`);
-  const bot = new Telegraf(TELEGRAM_TOKEN, { handlerTimeout: 9_000_000 });
+  const bot = new telegrafLoad.Telegraf(TELEGRAM_TOKEN, { handlerTimeout: 9_000_000 });
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-  setTelegramBridgeStatus({ status: 'configured', details: 'Telegram bridge credentials loaded and booting.' });
+  setTelegramBridgeStatus({
+    status: 'configured',
+    details: 'Telegram bridge credentials loaded and booting.',
+  });
   emitIntegrationSnapshot(state.lastMcpHealth);
 
   bot.on('text', (ctx) => handleTelegramText(ctx, { allowedUserIds, genAI, sendWithFallback }));
@@ -110,20 +179,31 @@ export function initTelegramBridge(): void {
 
   bot.catch((err: unknown) => {
     console.error('  ❌ Telegram Bot error (non-fatal):', err instanceof Error ? err.message : err);
-    setTelegramBridgeStatus({ status: 'offline', details: 'Telegram bridge reported a runtime error.' });
+    setTelegramBridgeStatus({
+      status: 'offline',
+      details: 'Telegram bridge reported a runtime error.',
+    });
     emitIntegrationSnapshot(state.lastMcpHealth);
   });
 
-  bot.launch({ dropPendingUpdates: true }, () => {
-    console.log('  ✅ Telegram Bridge Online');
-    console.log('  ⏱️  Heartbeat scheduled via Inngest (8:00 AM daily).');
-    setTelegramBridgeStatus({ status: 'online', details: 'Telegram bridge is connected and polling.' });
-    emitIntegrationSnapshot(state.lastMcpHealth);
-  }).catch(err => {
-    setTelegramBridgeStatus({ status: 'offline', details: 'Telegram bridge failed to start.' });
-    emitIntegrationSnapshot(state.lastMcpHealth);
-    console.error('  ❌ Telegram Bridge failed to start (non-fatal):', err.message || err);
-  });
+  bot
+    .launch({ dropPendingUpdates: true }, () => {
+      console.log('  ✅ Telegram Bridge Online');
+      console.log('  ⏱️  Heartbeat scheduled via Inngest (8:00 AM daily).');
+      setTelegramBridgeStatus({
+        status: 'online',
+        details: 'Telegram bridge is connected and polling.',
+      });
+      emitIntegrationSnapshot(state.lastMcpHealth);
+    })
+    .catch((err: unknown) => {
+      setTelegramBridgeStatus({ status: 'offline', details: 'Telegram bridge failed to start.' });
+      emitIntegrationSnapshot(state.lastMcpHealth);
+      console.error(
+        '  ❌ Telegram Bridge failed to start (non-fatal):',
+        err instanceof Error ? err.message : err,
+      );
+    });
 
   process.once('SIGINT', () => bot.stop('SIGINT'));
   process.once('SIGTERM', () => bot.stop('SIGTERM'));
