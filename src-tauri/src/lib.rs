@@ -91,6 +91,17 @@ fn resolve_node_exe() -> PathBuf {
 }
 
 /// Reads the `.server-port` file if it exists.
+/// Resolves the project root directory, handling the case where the binary
+/// is executed from `src-tauri` (as happens with `cargo run`).
+fn resolve_app_root() -> PathBuf {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // When `cargo run` executes from src-tauri, cwd is src-tauri.
+    if cwd.file_name().map(|n| n == "src-tauri").unwrap_or(false) {
+        return cwd.parent().unwrap_or(&cwd).to_path_buf();
+    }
+    cwd
+}
+
 fn read_port_file(app_root: &std::path::Path) -> Option<u16> {
     let path = app_root.join(".server-port");
     let contents = std::fs::read_to_string(path).ok()?;
@@ -172,17 +183,19 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
     // Determine server entry point.
     // In dev:  server/src/index.ts (requires tsx)
     // In prod: server/dist/bundle.mjs (pre-bundled)
-    let is_packaged = std::env::var("TAURI_ENV_DEBUG").is_err();
-    let server_entry = if is_packaged {
-        app_root.join("server").join("dist").join("bundle.mjs")
+    // Prefer the dev entry point (TypeScript source) when available;
+    // fall back to the bundled output for packaged builds.
+    let server_src = app_root.join("server").join("src").join("index.ts");
+    let server_bundle = app_root.join("server").join("dist").join("bundle.mjs");
+    let (server_entry, use_tsx) = if server_src.exists() {
+        (server_src, true)
+    } else if server_bundle.exists() {
+        (server_bundle, false)
     } else {
-        app_root.join("server").join("src").join("index.ts")
+        return Err("No server entry point found. Run `pnpm run build:server` first.".to_string());
     };
 
-    let spawn_args: Vec<String> = if is_packaged {
-        vec![server_entry.to_string_lossy().to_string()]
-    } else {
-        // In dev mode we need tsx to transpile TypeScript.
+    let spawn_args: Vec<String> = if use_tsx {
         let workspace_root = app_root.parent().and_then(|p| p.parent());
         let tsx_cli = workspace_root
             .map(|r| {
@@ -199,9 +212,10 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
                 server_entry.to_string_lossy().to_string(),
             ]
         } else {
-            // Fallback: hope node can run it directly (unlikely for .ts)
             vec![server_entry.to_string_lossy().to_string()]
         }
+    } else {
+        vec![server_entry.to_string_lossy().to_string()]
     };
 
     let mut child = Command::new(&node_exe)
@@ -311,8 +325,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             let handle = app.handle().clone();
-            let app_root =
-                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let app_root = resolve_app_root();
 
             // Spawn backend in a non-blocking task so the window can open immediately.
             tauri::async_runtime::spawn(async move {
