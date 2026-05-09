@@ -32,6 +32,9 @@ await build({
   external: ['electron'],
   sourcemap: 'linked',
   logLevel: 'info',
+  banner: {
+    js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
+  },
 });
 
 console.log(`✓ Server bundle written to server/dist/bundle.mjs`);
