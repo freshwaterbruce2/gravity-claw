@@ -30,7 +30,7 @@ pub struct BackendState {
 /// Default backend port used by the Gravity-Claw Hono server.
 const DEFAULT_BACKEND_PORT: u16 = 5187;
 /// How long to wait for the backend to become reachable (ms).
-const BACKEND_START_TIMEOUT_MS: u64 = 15_000;
+const BACKEND_START_TIMEOUT_MS: u64 = 30_000;
 /// Poll interval when waiting for backend port (ms).
 const BACKEND_POLL_INTERVAL_MS: u64 = 300;
 
