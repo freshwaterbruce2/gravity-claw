@@ -183,14 +183,17 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
     // Determine server entry point.
     // In dev:  server/src/index.ts (requires tsx)
     // In prod: server/dist/bundle.mjs (pre-bundled)
-    // Prefer the dev entry point (TypeScript source) when available;
-    // fall back to the bundled output for packaged builds.
     let server_src = app_root.join("server").join("src").join("index.ts");
     let server_bundle = app_root.join("server").join("dist").join("bundle.mjs");
-    let (server_entry, use_tsx) = if server_src.exists() {
+    let (server_entry, use_tsx) = if cfg!(debug_assertions) && server_src.exists() {
+        // Debug build: prefer TypeScript source with tsx
         (server_src, true)
     } else if server_bundle.exists() {
+        // Release build: always prefer pre-bundled output
         (server_bundle, false)
+    } else if server_src.exists() {
+        // Fallback: try TypeScript source even in release
+        (server_src, true)
     } else {
         return Err("No server entry point found. Run `pnpm run build:server` first.".to_string());
     };
