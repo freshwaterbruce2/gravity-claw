@@ -7,14 +7,16 @@
 //!   4. Clean up the backend process on app exit.
 
 mod commands;
+mod credentials;
 
 use commands::{
     auth_clear_session, auth_get_session, auth_set_gemini_key, auth_set_kimi_key, runtime_api_base,
-    storage_get_item, storage_remove_item, storage_set_item,
+    runtime_backend_status, storage_get_item, storage_remove_item, storage_set_item,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Manager, RunEvent};
+use tauri_plugin_updater::UpdaterExt;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
@@ -23,8 +25,15 @@ use tokio::time::{sleep, Duration};
 pub struct BackendState {
     /// Handle to the spawned Node.js backend process (None if externally managed).
     pub process: Mutex<Option<Child>>,
-    /// The active backend port (discovered after spawn).
-    pub port: Mutex<u16>,
+    /// The active backend status.
+    pub status: Mutex<BackendStatus>,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub enum BackendStatus {
+    Starting,
+    Ready(u16),
+    Failed(String),
 }
 
 /// Default backend port used by the Gravity-Claw Hono server.
@@ -34,13 +43,28 @@ const BACKEND_START_TIMEOUT_MS: u64 = 30_000;
 /// Poll interval when waiting for backend port (ms).
 const BACKEND_POLL_INTERVAL_MS: u64 = 300;
 
+/// Converts a path to a String, logging a warning if the conversion is lossy.
+fn path_to_string(path: &std::path::Path) -> String {
+    match path.to_str() {
+        Some(s) => s.to_string(),
+        None => {
+            let lossy = path.to_string_lossy().to_string();
+            eprintln!(
+                "[Gravity-Claw] Warning: path contains invalid Unicode and was lossily converted: {}",
+                lossy
+            );
+            lossy
+        }
+    }
+}
+
 /// Attempts to find the `node.exe` executable on Windows.
 /// Falls back to "node" if no specific binary is found.
 fn resolve_node_exe() -> PathBuf {
     // 1. Environment override
     if let Ok(path) = std::env::var("GRAVITY_CLAW_NODE_PATH") {
         let p = PathBuf::from(path.trim());
-        if p.exists() {
+        if p.is_file() {
             return p;
         }
     }
@@ -48,7 +72,7 @@ fn resolve_node_exe() -> PathBuf {
     // 2. npm_node_execpath
     if let Ok(path) = std::env::var("npm_node_execpath") {
         let p = PathBuf::from(path.trim());
-        if p.exists() {
+        if p.is_file() {
             return p;
         }
     }
@@ -64,7 +88,7 @@ fn resolve_node_exe() -> PathBuf {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 if let Some(first) = stdout.lines().next() {
                     let p = PathBuf::from(first.trim());
-                    if p.exists() {
+                    if p.is_file() {
                         return p;
                     }
                 }
@@ -81,7 +105,7 @@ fn resolve_node_exe() -> PathBuf {
         ];
         for c in &candidates {
             let p = PathBuf::from(c);
-            if p.exists() {
+            if p.is_file() {
                 return p;
             }
         }
@@ -102,9 +126,9 @@ fn resolve_app_root() -> PathBuf {
     cwd
 }
 
-fn read_port_file(app_root: &std::path::Path) -> Option<u16> {
+async fn read_port_file(app_root: &std::path::Path) -> Option<u16> {
     let path = app_root.join(".server-port");
-    let contents = std::fs::read_to_string(path).ok()?;
+    let contents = tokio::fs::read_to_string(path).await.ok()?;
     let trimmed = contents.trim();
     trimmed.parse::<u16>().ok()
 }
@@ -138,7 +162,7 @@ async fn is_backend_healthy(port: u16) -> bool {
                 return false;
             }
 
-            let mut buf = [0u8; 256];
+            let mut buf = [0u8; 4096];
             match tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await {
                 Ok(n) if n > 0 => {
                     let response = String::from_utf8_lossy(&buf[..n]);
@@ -154,7 +178,7 @@ async fn is_backend_healthy(port: u16) -> bool {
 /// Looks for an already-running backend by checking the port file and
 /// doing a quick health probe.
 async fn find_healthy_backend_port(app_root: &std::path::Path) -> Option<u16> {
-    let file_port = read_port_file(app_root);
+    let file_port = read_port_file(app_root).await;
     let candidates: Vec<u16> = file_port
         .into_iter()
         .chain(std::iter::once(DEFAULT_BACKEND_PORT))
@@ -210,15 +234,14 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
             .filter(|p| p.exists());
 
         if let Some(tsx) = tsx_cli {
-            vec![
-                tsx.to_string_lossy().to_string(),
-                server_entry.to_string_lossy().to_string(),
-            ]
+            vec![path_to_string(&tsx), path_to_string(&server_entry)]
+        } else if cfg!(debug_assertions) {
+            return Err("tsx CLI not found. Install it with `pnpm install tsx`.".to_string());
         } else {
-            vec![server_entry.to_string_lossy().to_string()]
+            vec![path_to_string(&server_entry)]
         }
     } else {
-        vec![server_entry.to_string_lossy().to_string()]
+        vec![path_to_string(&server_entry)]
     };
 
     let mut child = Command::new(&node_exe)
@@ -227,10 +250,7 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
         .env("GRAVITY_CLAW_PORT", DEFAULT_BACKEND_PORT.to_string())
         .env(
             "GRAVITY_CLAW_CONFIG_PATH",
-            app_root
-                .join(".gravity-claw.config.json")
-                .to_string_lossy()
-                .to_string(),
+            path_to_string(&app_root.join(".gravity-claw.config.json")),
         )
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -238,15 +258,34 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
         .map_err(|e| format!("Failed to spawn backend: {}", e))?;
 
     // Capture last lines of output for diagnostics.
+    let output_buf = Arc::new(Mutex::new(String::new()));
+
     if let Some(stdout) = child.stdout.take() {
-        let reader = tokio::io::BufReader::new(stdout);
-        let buf = Arc::new(Mutex::new(String::new()));
-        let buf_clone = buf.clone();
+        let buf = output_buf.clone();
         tokio::spawn(async move {
             use tokio::io::AsyncBufReadExt;
+            let reader = tokio::io::BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                let mut b = buf_clone.lock().await;
+                let mut b = buf.lock().await;
+                b.push_str(&line);
+                b.push('\n');
+                if b.len() > 6_000 {
+                    let keep_from = b.len() - 6_000;
+                    *b = b.split_off(keep_from);
+                }
+            }
+        });
+    }
+
+    if let Some(stderr) = child.stderr.take() {
+        let buf = output_buf.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            let reader = tokio::io::BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let mut b = buf.lock().await;
                 b.push_str(&line);
                 b.push('\n');
                 if b.len() > 6_000 {
@@ -262,7 +301,7 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
     let mut active_port = DEFAULT_BACKEND_PORT;
 
     loop {
-        let file_port = read_port_file(app_root);
+        let file_port = read_port_file(app_root).await;
         let candidates: Vec<u16> = file_port
             .into_iter()
             .chain(std::iter::once(DEFAULT_BACKEND_PORT))
@@ -291,15 +330,10 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
                     "killed by signal".to_string()
                 };
                 let mut err = format!("Backend exited before startup completed ({}).", details);
-                // Try to capture stderr
-                if let Some(mut stderr) = child.stderr.take() {
-                    use tokio::io::AsyncReadExt;
-                    let mut buf = Vec::new();
-                    let _ = stderr.read_to_end(&mut buf).await;
-                    if !buf.is_empty() {
-                        err.push_str("\n\nBackend output:\n");
-                        err.push_str(&String::from_utf8_lossy(&buf));
-                    }
+                let output = output_buf.lock().await;
+                if !output.is_empty() {
+                    err.push_str("\n\nBackend output:\n");
+                    err.push_str(&output);
                 }
                 return Err(err);
             }
@@ -323,9 +357,10 @@ pub fn run() {
     tauri::Builder::default()
         .manage(BackendState {
             process: Mutex::new(None),
-            port: Mutex::new(DEFAULT_BACKEND_PORT),
+            status: Mutex::new(BackendStatus::Starting),
         })
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let app_root = resolve_app_root();
@@ -336,12 +371,32 @@ pub fn run() {
                     Ok((child, port)) => {
                         let state = handle.state::<BackendState>();
                         *state.process.lock().await = child;
-                        *state.port.lock().await = port;
+                        *state.status.lock().await = BackendStatus::Ready(port);
                         eprintln!("[Gravity-Claw] Backend ready on port {}", port);
                     }
                     Err(e) => {
                         eprintln!("[Gravity-Claw] Failed to start backend: {}", e);
-                        // We don't quit here — the UI can show an error state.
+                        let state = handle.state::<BackendState>();
+                        *state.status.lock().await = BackendStatus::Failed(e);
+                    }
+                }
+            });
+
+            // Check for app updates in the background on startup.
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                match app_handle.updater_builder().build() {
+                    Ok(updater) => {
+                        if let Ok(Some(update)) = updater.check().await {
+                            eprintln!(
+                                "[Gravity-Claw] Update available: {} -> {}",
+                                update.current_version,
+                                update.version
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[Gravity-Claw] Updater init failed: {}", e);
                     }
                 }
             });
@@ -357,6 +412,7 @@ pub fn run() {
             storage_set_item,
             storage_remove_item,
             runtime_api_base,
+            runtime_backend_status,
         ])
         .build(tauri::generate_context!())
         .expect("error building Gravity-Claw Tauri application")
@@ -367,6 +423,7 @@ pub fn run() {
                 tauri::async_runtime::block_on(async {
                     if let Some(mut child) = state.process.lock().await.take() {
                         let _ = child.kill().await;
+                        let _ = child.wait().await;
                     }
                 });
             }

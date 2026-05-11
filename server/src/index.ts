@@ -31,31 +31,7 @@ import { DEFAULT_MODEL, getSystemInstruction, handleFunctionCalls, resolveModelI
 import { isKimiModel, handleKimiChat } from './kimi.js';
 import { trimHistory } from './history.js';
 import { initTelegramBridge } from './telegram.js';
-
-dotenv.config({ override: true });
-
-// ── Startup Environment Validation ───────────────────────────────────────────
-(function validateRequiredEnv() {
-  const hasGemini = typeof process.env.GEMINI_API_KEY === 'string' && process.env.GEMINI_API_KEY.trim().length > 0;
-  const hasKimi = typeof process.env.KIMI_API_KEY === 'string' && process.env.KIMI_API_KEY.trim().length > 0;
-
-  if (!hasGemini && !hasKimi) {
-    console.error(
-      '[gravity-claw] FATAL: No LLM API key found in environment.\n' +
-      '  Set GEMINI_API_KEY (for Gemini models) or KIMI_API_KEY (for Kimi models),\n' +
-      '  or both. Chat requests will fail without at least one key.\n' +
-      '  Add the key(s) to your .env file and restart the server.',
-    );
-    process.exit(1);
-  }
-
-  if (!hasGemini) {
-    console.warn('[gravity-claw] WARNING: GEMINI_API_KEY is not set. Gemini models will be unavailable; only Kimi models will work.');
-  }
-  if (!hasKimi) {
-    console.warn('[gravity-claw] WARNING: KIMI_API_KEY is not set. Kimi models will be unavailable.');
-  }
-})();
+import { optionalAuth, inngestAuth } from './auth.js';
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const PREFERRED_PORT = (() => {
@@ -64,30 +40,6 @@ const PREFERRED_PORT = (() => {
 })();
 const PORT_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.server-port');
 
-state.appConfig = await getGravityClawConfig();
-state.eventBus = createEventBus();
-
-loadSoul();
-await ensureMcpGateway();
-await refreshMcpTools();
-
-if (state.appConfig.memoryEnabled) {
-  refreshMemoryContext().catch((err) => { console.warn('[memory] startup context refresh failed:', err); });
-  callMemoryTool('memory_set_context', { project: 'gravity-claw', status: 'online' })
-    .catch((err) => { console.warn('[memory] startup set_context failed:', err); });
-}
-
-state.lastMcpHealth = await fetchMcpHealth();
-emitConfigSnapshot();
-emitIntegrationSnapshot(state.lastMcpHealth);
-state.eventBus.emit('mcp.status', state.lastMcpHealth);
-state.eventBus.emit('system.metrics', readSystemMetrics());
-emitTaskSnapshot('bootstrap');
-startMcpHealthPoller(state.eventBus, (results) => { state.lastMcpHealth = results; emitIntegrationSnapshot(results); });
-startSystemMetrics(state.eventBus);
-setToolRefreshDeps({ refreshMcpTools });
-initTelegramBridge();
-
 // ── HTTP App ─────────────────────────────────────────────────────────────────
 const app = new Hono();
 app.use('*', cors({
@@ -95,13 +47,10 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
+app.use('*', optionalAuth);
 
 app.get('/api/health', (c) => c.json({
-  status: 'ok', service: 'gravity-claw', name: state.appConfig.name,
-  model: state.appConfig.model, tools: state.geminiFunctionTool?.functionDeclarations.length || 0,
-  memoryEnabled: state.appConfig.memoryEnabled, directShellEnabled: state.appConfig.directShellEnabled,
-  gitPipelineEnabled: state.appConfig.gitPipelineEnabled,
-  platforms: state.appConfig.platforms, skillEngine: state.appConfig.skillEngine, ts: Date.now(),
+  status: 'ok', service: 'gravity-claw', ts: Date.now(),
 }));
 
 app.get('/api/config', async (c) => {
@@ -319,31 +268,62 @@ app.get('/api/models', (c) => c.json({
 }));
 
 // ── Inngest ──────────────────────────────────────────────────────────────────
+const inngestSigningKey = process.env.INNGEST_SIGNING_KEY?.trim() ?? '';
+if (!inngestSigningKey) {
+  console.warn('[boot] INNGEST_SIGNING_KEY is not set; /api/inngest is open to all requests');
+}
 const inngestHandler = serveInngest({ client: inngest, functions: allFunctions });
-app.on(['GET', 'PUT', 'POST'], '/api/inngest', async (c) => inngestHandler(c));
+app.on(['GET', 'PUT', 'POST'], '/api/inngest', inngestAuth, async (c) => inngestHandler(c));
 
 // ── SSE ──────────────────────────────────────────────────────────────────────
-app.get('/api/stream', (c) =>
-  streamSSE(c, async (sseStream) => {
+const MAX_SSE_CLIENTS = 50;
+const activeSseClients = new Map<string, { handler: (event: { kind: string; data: unknown; ts: number }) => void; keepAlive: ReturnType<typeof setInterval> }>();
+
+app.get('/api/stream', (c) => {
+  if (activeSseClients.size >= MAX_SSE_CLIENTS) {
+    return c.json({ error: 'Too many concurrent stream connections' }, 503);
+  }
+
+  return streamSSE(c, async (sseStream) => {
+    const clientId = crypto.randomUUID();
     const snapshot = state.eventBus.getSnapshot();
     if (snapshot.size > 0) {
       await sseStream.writeSSE({
         event: 'snapshot', data: JSON.stringify(Object.fromEntries(snapshot)), id: String(Date.now()),
       });
     }
+
     const handler = (event: { kind: string; data: unknown; ts: number }) => {
       sseStream
         .writeSSE({ event: event.kind, data: JSON.stringify(event.data), id: String(event.ts) })
-        .catch(() => {});
+        .catch(() => { cleanup(); });
     };
+
     state.eventBus.subscribe(handler);
+
     const keepAlive = setInterval(() => {
-      sseStream.writeSSE({ event: 'ping', data: '', id: String(Date.now()) }).catch(() => {});
+      sseStream.writeSSE({ event: 'ping', data: '', id: String(Date.now()) }).catch(() => { cleanup(); });
     }, 30_000);
-    sseStream.onAbort(() => { state.eventBus.unsubscribe(handler); clearInterval(keepAlive); });
-    await new Promise(() => {});
-  }),
-);
+
+    activeSseClients.set(clientId, { handler, keepAlive });
+
+    const cleanup = () => {
+      if (activeSseClients.has(clientId)) {
+        state.eventBus.unsubscribe(handler);
+        clearInterval(keepAlive);
+        activeSseClients.delete(clientId);
+      }
+    };
+
+    sseStream.onAbort(cleanup);
+
+    // Keep connection open until aborted or a write fails
+    while (!sseStream.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    cleanup();
+  });
+});
 
 app.get('/api/mcp/status', (c) => {
   const snapshot = state.eventBus.getSnapshot();
@@ -368,19 +348,8 @@ function findOpenPort(start: number, maxAttempts = 20): Promise<number> {
   });
 }
 
-const resolvedPort = await findOpenPort(PREFERRED_PORT);
-
-serve({ fetch: app.fetch, port: resolvedPort }, () => {
-  fs.writeFileSync(PORT_FILE, String(resolvedPort), 'utf8');
-  if (resolvedPort !== PREFERRED_PORT) {
-    console.log(`\n  🦀 gravity-claw proxy running (port ${PREFERRED_PORT} was busy)`);
-  } else { console.log('\n  🦀 gravity-claw proxy running'); }
-  console.log(`  ➜  http://localhost:${resolvedPort}`);
-  console.log(`  📡 Inngest endpoint: http://localhost:${resolvedPort}/api/inngest\n`);
-});
-
 function shutdown() {
-  try { fs.unlinkSync(PORT_FILE); } catch {}
+  try { fs.unlinkSync(PORT_FILE); } catch { /* ignore cleanup errors on shutdown */ }
   if (state.mcpGatewayProcess && !state.mcpGatewayProcess.killed) {
     state.mcpGatewayProcess.kill();
     state.mcpGatewayProcess = null;
@@ -389,4 +358,70 @@ function shutdown() {
 
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
-process.once('exit', () => { try { fs.unlinkSync(PORT_FILE); } catch {} });
+process.once('exit', () => { try { fs.unlinkSync(PORT_FILE); } catch { /* ignore cleanup errors on exit */ } });
+
+async function boot() {
+  dotenv.config({ override: true });
+
+  // Startup Environment Validation
+  const hasGemini = typeof process.env.GEMINI_API_KEY === 'string' && process.env.GEMINI_API_KEY.trim().length > 0;
+  const hasKimi = typeof process.env.KIMI_API_KEY === 'string' && process.env.KIMI_API_KEY.trim().length > 0;
+
+  if (!hasGemini && !hasKimi) {
+    console.error(
+      '[gravity-claw] FATAL: No LLM API key found in environment.\n' +
+      '  Set GEMINI_API_KEY (for Gemini models) or KIMI_API_KEY (for Kimi models),\n' +
+      '  or both. Chat requests will fail without at least one key.\n' +
+      '  Add the key(s) to your .env file and restart the server.',
+    );
+    process.exit(1);
+  }
+
+  if (!hasGemini) {
+    console.warn('[gravity-claw] WARNING: GEMINI_API_KEY is not set. Gemini models will be unavailable; only Kimi models will work.');
+  }
+  if (!hasKimi) {
+    console.warn('[gravity-claw] WARNING: KIMI_API_KEY is not set. Kimi models will be unavailable.');
+  }
+
+  state.appConfig = await getGravityClawConfig();
+  state.eventBus = createEventBus();
+
+  loadSoul();
+  await ensureMcpGateway();
+  await refreshMcpTools();
+
+  if (state.appConfig.memoryEnabled) {
+    refreshMemoryContext().catch((err) => { console.warn('[memory] startup context refresh failed:', err); });
+    callMemoryTool('memory_set_context', { project: 'gravity-claw', status: 'online' })
+      .catch((err) => { console.warn('[memory] startup set_context failed:', err); });
+  }
+
+  state.lastMcpHealth = await fetchMcpHealth();
+  emitConfigSnapshot();
+  emitIntegrationSnapshot(state.lastMcpHealth);
+  state.eventBus.emit('mcp.status', state.lastMcpHealth);
+  state.eventBus.emit('system.metrics', readSystemMetrics());
+  emitTaskSnapshot('bootstrap');
+  startMcpHealthPoller(state.eventBus, (results) => { state.lastMcpHealth = results; emitIntegrationSnapshot(results); });
+  startSystemMetrics(state.eventBus);
+  setToolRefreshDeps({ refreshMcpTools });
+  initTelegramBridge();
+
+  const resolvedPort = await findOpenPort(PREFERRED_PORT);
+
+  serve({ fetch: app.fetch, port: resolvedPort }, () => {
+    fs.writeFileSync(PORT_FILE, String(resolvedPort), 'utf8');
+    if (resolvedPort !== PREFERRED_PORT) {
+      console.log(`\n  🦀 gravity-claw proxy running (port ${PREFERRED_PORT} was busy)`);
+    } else { console.log('\n  🦀 gravity-claw proxy running'); }
+    console.log(`  ➜  http://localhost:${resolvedPort}`);
+    console.log(`  📡 Inngest endpoint: http://localhost:${resolvedPort}/api/inngest\n`);
+  });
+}
+
+// Only boot when this is the main entry point (not when imported for testing)
+const isMainModule = import.meta.url.startsWith('file:') && process.argv[1] && import.meta.url.includes(process.argv[1].replace(/\\/g, '/'));
+if (isMainModule) {
+  void boot();
+}
