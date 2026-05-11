@@ -15,10 +15,20 @@ export function parseAllowedTelegramUserIds(
     return [];
   }
 
-  const ids = rawValue
+  const parsed = rawValue
     .split(',')
-    .map((value) => Number.parseInt(value.trim(), 10))
-    .filter((value): value is number => Number.isInteger(value) && value > 0);
+    .map((token) => ({ raw: token.trim(), value: Number.parseInt(token.trim(), 10) }));
+
+  const invalid = parsed.filter(({ value }) => Number.isInteger(value) && value <= 0);
+  if (invalid.length > 0) {
+    console.warn(
+      `[telegram] TELEGRAM_ALLOWED_USER_IDS contains non-positive integer(s) which are not valid Telegram user IDs and will be ignored: ${invalid.map((e) => e.raw).join(', ')}`,
+    );
+  }
+
+  const ids = parsed
+    .filter((item): item is { raw: string; value: number } => Number.isInteger(item.value) && item.value > 0)
+    .map(({ value }) => value);
 
   return [...new Set(ids)];
 }

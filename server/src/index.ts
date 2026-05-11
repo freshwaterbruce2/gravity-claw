@@ -32,6 +32,7 @@ import { isKimiModel, handleKimiChat } from './kimi.js';
 import { trimHistory } from './history.js';
 import { initTelegramBridge } from './telegram.js';
 import { optionalAuth, inngestAuth } from './auth.js';
+import { initDb, closeDb } from './db.js';
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const PREFERRED_PORT = (() => {
@@ -354,6 +355,7 @@ function shutdown() {
     state.mcpGatewayProcess.kill();
     state.mcpGatewayProcess = null;
   }
+  closeDb();
 }
 
 process.once('SIGINT', shutdown);
@@ -362,6 +364,7 @@ process.once('exit', () => { try { fs.unlinkSync(PORT_FILE); } catch { /* ignore
 
 async function boot() {
   dotenv.config({ override: true });
+  initDb();
 
   // Startup Environment Validation
   const hasGemini = typeof process.env.GEMINI_API_KEY === 'string' && process.env.GEMINI_API_KEY.trim().length > 0;
@@ -420,8 +423,14 @@ async function boot() {
   });
 }
 
-// Only boot when this is the main entry point (not when imported for testing)
-const isMainModule = import.meta.url.startsWith('file:') && process.argv[1] && import.meta.url.includes(process.argv[1].replace(/\\/g, '/'));
+// Only boot when this is the main entry point (not when imported for testing).
+// Use fileURLToPath + path.resolve for an exact path comparison instead of a
+// substring includes() check, which can produce false positives when one path
+// is a suffix of another.
+const isMainModule =
+  import.meta.url.startsWith('file:') &&
+  Boolean(process.argv[1]) &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
 if (isMainModule) {
   void boot();
 }

@@ -1,4 +1,5 @@
 import { state, RECENT_EVENT_LIMIT, RECENT_ACTIVITY_LIMIT } from './state.js';
+import { recordActivity, appendLog } from './db.js';
 import { buildIntegrationSnapshot, getTelegramBridgeStatus } from './integrations.js';
 import { listTasks, summarizeTasks, type TaskRecord } from './tasks.js';
 import { collectSkillsSnapshot } from './skills.js';
@@ -17,12 +18,14 @@ export function emitLog(level: LogEntryRecord['level'], message: string, source:
   const entry: LogEntryRecord = { level, message, source, ts: Date.now() };
   keepRecent(state.recentLogs, entry, RECENT_EVENT_LIMIT);
   state.eventBus.emit('log.entry', entry);
+  appendLog(entry);
 }
 
 export function emitAgentActivity(activity: Omit<AgentActivityRecord, 'ts'>) {
   const entry: AgentActivityRecord = { ...activity, ts: Date.now() };
   keepRecent(state.recentActivities, entry, RECENT_ACTIVITY_LIMIT);
   state.eventBus.emit('agent.activity', entry);
+  recordActivity(entry);
 }
 
 export function emitTaskSnapshot(action: string, task?: TaskRecord | null) {

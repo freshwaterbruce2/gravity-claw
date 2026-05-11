@@ -5,7 +5,7 @@
   "memoryEnabled": true,
   "beeMemoryEnabled": true,
   "selfImprovementEnabled": true,
-  "vectorMemoryEnabled": true,
+  "vectorMemoryEnabled": false,
   "directShellEnabled": true,
   "workspaceWatchersEnabled": false,
   "gitPipelineEnabled": true,

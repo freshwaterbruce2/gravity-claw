@@ -32,6 +32,35 @@ function withEnv(name, value, fn) {
   });
 }
 
+async function getUnusedPort() {
+  const server = net.createServer();
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected a TCP server address.');
+  }
+
+  const { port } = address;
+
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+
+  return port;
+}
+
 async function createListeningServer() {
   const server = net.createServer();
 
@@ -96,12 +125,13 @@ test('readBackendPortFromFile returns null for invalid port file content', async
 test('waitForBackendPort rejects on timeout', async () => {
   const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-timeout-'));
   const childProcess = new EventEmitter();
+  const unusedPort = await getUnusedPort();
 
   await assert.rejects(
     waitForBackendPort({
       appRoot,
       childProcess,
-      preferredPort: 5187,
+      preferredPort: unusedPort,
       timeoutMs: 100,
       label: 'test backend',
     }),
@@ -112,11 +142,12 @@ test('waitForBackendPort rejects on timeout', async () => {
 test('waitForBackendPort rejects on child process error', async () => {
   const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-child-error-'));
   const childProcess = new EventEmitter();
+  const unusedPort = await getUnusedPort();
 
   const pending = waitForBackendPort({
     appRoot,
     childProcess,
-    preferredPort: 5187,
+    preferredPort: unusedPort,
     timeoutMs: 2_000,
     label: 'test backend',
   });
@@ -143,12 +174,13 @@ test('resolveBackendPort prefers the repo port file over environment defaults', 
 test('waitForBackendPort resolves the dynamically written server port', async () => {
   const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-port-wait-'));
   const childProcess = new EventEmitter();
+  const unusedPort = await getUnusedPort();
   const server = await createListeningServer();
 
   const pendingPort = waitForBackendPort({
     appRoot,
     childProcess,
-    preferredPort: 5187,
+    preferredPort: unusedPort,
     timeoutMs: 2_000,
     label: 'test backend',
   });

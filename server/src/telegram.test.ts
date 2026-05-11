@@ -15,6 +15,16 @@ test('parseAllowedTelegramUserIds trims values and ignores invalid entries', () 
   );
 });
 
+test('parseAllowedTelegramUserIds warns about non-positive integer IDs', (t) => {
+  const warnSpy = t.mock.method(console, 'warn');
+  parseAllowedTelegramUserIds('12345, -67890, 0, 42');
+  const warnings = warnSpy.mock.calls.map((c) => String(c.arguments[0] ?? ''));
+  assert.ok(
+    warnings.some((w) => w.includes('-67890') && w.includes('0')),
+    `expected warning mentioning non-positive IDs, got: ${JSON.stringify(warnings)}`,
+  );
+});
+
 test('isTelegramUserAllowed denies access when no allowlist is configured', () => {
   assert.equal(isTelegramUserAllowed(12345, []), false);
   assert.equal(isTelegramUserAllowed(undefined, [12345]), false);
@@ -94,7 +104,7 @@ test('handleTelegramText sends fallback message when LLM returns no text', async
   const ctx: TelegramTextContext = {
     from: { id: 42, username: 'bruce' },
     message: { text: 'anything' },
-    sendChatAction: async () => {},
+    sendChatAction: async () => { },
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {
@@ -115,7 +125,7 @@ test('handleTelegramText rate-limits excessive messages from the same user', asy
   const ctx: TelegramTextContext = {
     from: { id: 42, username: 'bruce' },
     message: { text: 'spam' },
-    sendChatAction: async () => {},
+    sendChatAction: async () => { },
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {
@@ -140,7 +150,7 @@ test('handleTelegramText surfaces LLM errors back to the user', async (t) => {
   const ctx: TelegramTextContext = {
     from: { id: 43, username: 'bruce' },
     message: { text: 'please break' },
-    sendChatAction: async () => {},
+    sendChatAction: async () => { },
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {
@@ -168,7 +178,7 @@ test('handleTelegramText handles empty message text', async (t) => {
   const ctx: TelegramTextContext = {
     from: { id: 44, username: 'bruce' },
     message: { text: '' },
-    sendChatAction: async () => {},
+    sendChatAction: async () => { },
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {
@@ -190,7 +200,7 @@ test('handleTelegramText chunks replies longer than 4096 characters', async (t) 
   const ctx: TelegramTextContext = {
     from: { id: 45, username: 'bruce' },
     message: { text: 'long' },
-    sendChatAction: async () => {},
+    sendChatAction: async () => { },
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {

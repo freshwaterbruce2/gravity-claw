@@ -142,30 +142,35 @@ function evaluateShellCommand(command: string, config: GravityClawConfig): ToolP
     };
   }
 
-  if (!config.gitPipelineEnabled) {
-    return {
-      allowed: false,
-      error: 'Git pipeline is disabled. Enable it in Settings before asking G-CLAW to mutate git state.',
-    };
-  }
+  // Git-specific policy: the pipeline toggle and git sub-command guards only
+  // apply to `git` itself.  Non-git tools (node, pnpm, npm, python, npx, tsx)
+  // are always allowed once they pass the allowlist check above.
+  if (baseCmd === 'git') {
+    if (!config.gitPipelineEnabled) {
+      return {
+        allowed: false,
+        error: 'Git pipeline is disabled. Enable it in Settings before asking G-CLAW to mutate git state.',
+      };
+    }
 
-  if (isBlockedGitCommand(tokens)) {
-    return {
-      allowed: false,
-      error: 'That git command is blocked by Gravity Claw policy because it rewrites history or destroys local state.',
-    };
-  }
+    if (isBlockedGitCommand(tokens)) {
+      return {
+        allowed: false,
+        error: 'That git command is blocked by Gravity Claw policy because it rewrites history or destroys local state.',
+      };
+    }
 
-  if (!isAllowedGitCommand(tokens)) {
-    return {
-      allowed: false,
-      error: 'That git command is outside the current Gravity Claw allowlist for autonomous execution.',
-    };
-  }
+    if (!isAllowedGitCommand(tokens)) {
+      return {
+        allowed: false,
+        error: 'That git command is outside the current Gravity Claw allowlist for autonomous execution.',
+      };
+    }
 
-  const addCommitCheck = validateGitAddCommit(tokens);
-  if (addCommitCheck) {
-    return addCommitCheck;
+    const addCommitCheck = validateGitAddCommit(tokens);
+    if (addCommitCheck) {
+      return addCommitCheck;
+    }
   }
 
   return { allowed: true };
