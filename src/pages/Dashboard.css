@@ -181,6 +181,8 @@
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
+  font-size: var(--text-2xl);
+  line-height: 1;
 }
 
 .ops-stat-label {
@@ -190,14 +192,14 @@
   color: var(--text-muted);
 }
 
-.ops-stat-value {
-  font-size: var(--text-2xl);
-  line-height: 1;
-}
-
 .ops-stat-hint {
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+.btn-header-sm {
+  height: 26px;
+  font-size: 11px;
 }
 
 .widget-actions {
@@ -344,6 +346,18 @@
   flex: 1;
 }
 
+.hero-gauge-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.hero-gauges-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
 .hero-gauge {
   display: flex;
   flex-direction: column;
@@ -397,6 +411,10 @@
 
 .ring-text {
   font-family: var(--font-code);
+}
+
+.ring-fill-animated {
+  transition: stroke-dasharray 0.8s ease-out;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -484,6 +502,10 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.widget-task-legend-item {
+  font-size: 10px;
 }
 
 .task-donut {
@@ -703,6 +725,16 @@
   transition: width 0.6s var(--ease-out);
 }
 
+.skill-cat-bar-fill--amber { background-color: var(--amber); }
+.skill-cat-bar-fill--cyan { background-color: var(--cyan); }
+.skill-cat-bar-fill--green { background-color: var(--green); }
+.skill-cat-bar-fill--blue { background-color: var(--blue); }
+
+.skill-cat-actions {
+  text-align: right;
+  margin-top: 8px;
+}
+
 .skill-cat-count {
   font-family: var(--font-code);
   font-size: 10px;
@@ -769,6 +801,16 @@
   flex-shrink: 0;
 }
 
+.log-mini-dot--cyan { background-color: var(--cyan); }
+.log-mini-dot--amber { background-color: var(--amber); }
+.log-mini-dot--red { background-color: var(--red); }
+.log-mini-dot--muted { background-color: var(--text-muted); }
+.log-mini-dot--green { background-color: var(--green); }
+
+.widget-task-legend-item {
+  font-size: 10px;
+}
+
 .log-mini-msg {
   flex: 1;
   color: var(--text-secondary);
@@ -780,6 +822,11 @@
 .log-mini-time {
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.section-header-btn {
+  height: 26px;
+  font-size: 11px;
 }
 
 /* ═══════════════════════════════════════════════════════════════

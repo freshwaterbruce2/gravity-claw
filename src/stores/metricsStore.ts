@@ -35,7 +35,7 @@ export const useMetricsStore = create<MetricsState>((set) => ({
       cpuHistory: [...s.cpuHistory.slice(-(MAX_HISTORY - 1)), m.cpu],
       memHistory: [
         ...s.memHistory.slice(-(MAX_HISTORY - 1)),
-        Math.round((m.memUsed / m.memTotal) * 100),
+        Math.round(m.memTotal > 0 ? (m.memUsed / m.memTotal) * 100 : 0),
       ],
     })),
 }));

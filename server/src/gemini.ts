@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { GoogleGenerativeAI } from '@google/generative-ai';
 import { state } from './state.js';
 import { emitLog, emitAgentActivity } from './emitters.js';
 import { enforceToolPolicy } from './capability-policy.js';
@@ -60,13 +60,20 @@ export async function handleFunctionCalls(chatSession: any, response: any): Prom
         const mapping = state.availableMcpToolsMap[call.name];
         let resultData: unknown;
 
-        if (!mapping) {
-          resultData = { error: `Tool ${call.name} not found.` };
-        } else {
-          const policy = enforceToolPolicy(mapping.server, mapping.tool, call.args ?? {}, state.appConfig);
-          resultData = policy.allowed
-            ? await executeMcpTool(mapping.server, mapping.tool, call.args)
-            : { error: policy.error, policyBlocked: true };
+        try {
+          if (!mapping) {
+            resultData = { error: `Tool ${call.name} not found.` };
+          } else {
+            const policy = enforceToolPolicy(mapping.server, mapping.tool, call.args ?? {}, state.appConfig ?? {} as any);
+            resultData = policy.allowed
+              ? await executeMcpTool(mapping.server, mapping.tool, call.args)
+              : { error: policy.error, policyBlocked: true };
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Tool execution failed';
+          console.error(`  ❌ Tool ${call.name} failed:`, msg);
+          emitLog('error', `Tool ${call.name} failed: ${msg}`, 'handleFunctionCalls');
+          resultData = { error: msg };
         }
 
         emitAgentActivity({

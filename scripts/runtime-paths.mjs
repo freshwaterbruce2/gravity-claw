@@ -57,21 +57,12 @@ export function getNodeExecutable() {
   const candidates = [
     process.env.GRAVITY_CLAW_NODE_PATH,
     process.env.npm_node_execpath,
-    process.versions.electron ? null : process.execPath,
+    process.execPath,
     process.env.NODE,
   ];
 
   return candidates.find((candidate) => typeof candidate === 'string' && candidate.trim())?.trim()
     ?? getDefaultNodeExecutable();
-}
-
-export function getElectronExecutable(appRoot) {
-  return getWorkspaceToolPath(
-    appRoot,
-    'electron',
-    'dist',
-    process.platform === 'win32' ? 'electron.exe' : 'electron'
-  );
 }
 
 export function waitForPort(port, timeoutMs = 15_000) {
@@ -176,11 +167,11 @@ export function waitForBackendPort({
       }
 
       setTimeout(() => {
-        void tryResolve();
+        void tryResolve().catch(reject);
       }, 300);
     };
 
-    void tryResolve();
+    void tryResolve().catch(reject);
   });
 }
 
@@ -232,11 +223,11 @@ export function waitForBackendEndpoint({
       }
 
       setTimeout(() => {
-        void tryResolve();
+        void tryResolve().catch(reject);
       }, 300);
     };
 
-    void tryResolve();
+    void tryResolve().catch(reject);
   });
 }
 

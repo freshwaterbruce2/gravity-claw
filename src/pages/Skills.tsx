@@ -33,8 +33,8 @@ export default function Skills() {
       {/* Header */}
       <div className="skills-header">
         <div>
-          <h3 style={{ color: 'var(--text-primary)', marginBottom: 4 }}>Skill Browser</h3>
-          <p className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
+          <h3>Skill Browser</h3>
+          <p className="text-muted">
             {!hydrated
               ? 'Syncing live skill inventory...'
               : `${skills.length} skills available — ${skills.filter((s) => s.status === 'active').length} active`}

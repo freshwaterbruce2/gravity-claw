@@ -12,9 +12,6 @@
 }
 
 /* Section */
-.settings-section {
-}
-
 .settings-rows {
   display: flex;
   flex-direction: column;
@@ -139,6 +136,49 @@
   letter-spacing: 0.08em;
 }
 
+.key-field-wrap {
+  flex: 1;
+}
+
+.key-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.key-field-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.key-field-input {
+  width: 100%;
+  font-family: var(--font-code);
+  font-size: 12px;
+  padding-right: 52px;
+}
+
+.key-field-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  letter-spacing: 0.08em;
+}
+
+.key-field-save-btn {
+  height: 38px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.platform-toggle {
+  margin-top: auto;
+}
+
 /* Platform Grid */
 .platform-grid {
   display: grid;
@@ -194,6 +234,51 @@
   color: var(--text-secondary);
 }
 
+.btn-sm {
+  height: 36px;
+  font-size: 12px;
+}
+
+.btn-save {
+  height: 42px;
+  padding-inline: var(--sp-8);
+}
+
+.key-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.key-field-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.key-field-input {
+  width: 100%;
+  font-family: var(--font-code);
+  font-size: 12px;
+  padding-right: 52px;
+}
+
+.key-field-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  letter-spacing: 0.08em;
+}
+
+.key-field-save {
+  height: 38px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* Save Row */
 .settings-save-row {
   display: flex;
@@ -210,6 +295,11 @@
 }
 .save-feedback--visible {
   opacity: 1;
+}
+
+.settings-save-btn {
+  height: 42px;
+  padding-inline: var(--sp-8);
 }
 
 /* Responsive */

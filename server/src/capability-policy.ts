@@ -3,7 +3,7 @@ import type { McpServerWithTools } from './mcp.js';
 
 const SHELL_SERVERS = new Set(['desktop-commander', 'desktop_commander']);
 const SHELL_TOOLS = new Set(['dc_run_cmd', 'dc_run_powershell']);
-const SHELL_SEPARATORS = /&&|\|\||;|\||[\r\n]/;
+const SHELL_METACHARACTERS = /&&|\|\||;|\||[\r\n`$><]|\$\(/;
 
 type ToolPolicyResult = { allowed: true } | { allowed: false; error: string };
 
@@ -12,7 +12,8 @@ function isShellExecutionTool(server: string, tool: string) {
 }
 
 function extractCommand(args: Record<string, unknown>) {
-  return typeof args.command === 'string' ? args.command.trim() : '';
+  const value = args.command ?? args.cmd ?? args.script ?? args.code;
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function tokenize(command: string) {
@@ -20,13 +21,55 @@ function tokenize(command: string) {
 }
 
 function isBlockedGitCommand(tokens: string[]) {
+  if (tokens.length < 2) return false;
+  const t2Flag = tokens.length >= 3 ? tokens[2].split('=')[0] : '';
   return (
-    (tokens[1] === 'reset' && tokens[2] === '--hard') ||
-    (tokens[1] === 'clean' && tokens[2] === '-fd') ||
-    (tokens[1] === 'push' && tokens[2] === '--force') ||
-    (tokens[1] === 'rebase' && tokens[2] === '-i') ||
+    (tokens[1] === 'reset' && t2Flag === '--hard') ||
+    (tokens[1] === 'clean' && t2Flag === '-fd') ||
+    (tokens[1] === 'push' && t2Flag === '--force') ||
+    (tokens[1] === 'rebase' && t2Flag === '-i') ||
     tokens[1] === 'filter-branch'
   );
+}
+
+function validateGitAddCommit(tokens: string[]): ToolPolicyResult | null {
+  if (tokens.length < 2) return null;
+  const subcmd = tokens[1];
+
+  if (subcmd === 'add') {
+    for (const t of tokens) {
+      const flag = t.split('=')[0];
+      if (flag === '-f' || flag === '--force') {
+        return { allowed: false, error: 'git add --force is blocked by Gravity Claw policy.' };
+      }
+    }
+  }
+
+  if (subcmd === 'commit') {
+    for (let i = 2; i < tokens.length; i++) {
+      const flag = tokens[i].split('=')[0];
+      if (flag === '--no-verify') {
+        return { allowed: false, error: 'git commit --no-verify is blocked by Gravity Claw policy.' };
+      }
+      if (flag === '--allow-empty') {
+        return { allowed: false, error: 'git commit --allow-empty is blocked by Gravity Claw policy.' };
+      }
+      if (flag === '-m' || flag === '--message') {
+        const next = tokens[i + 1];
+        if (next === undefined || next === '""' || next === "''" || next === '') {
+          return { allowed: false, error: 'git commit with an empty message is blocked by Gravity Claw policy.' };
+        }
+      }
+      if (tokens[i].startsWith('-m=') || tokens[i].startsWith('--message=')) {
+        const msg = tokens[i].slice(tokens[i].indexOf('=') + 1);
+        if (msg === '""' || msg === "''" || msg === '') {
+          return { allowed: false, error: 'git commit with an empty message is blocked by Gravity Claw policy.' };
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function isAllowedGitCommand(tokens: string[]) {
@@ -57,21 +100,46 @@ function isAllowedGitCommand(tokens: string[]) {
   return false;
 }
 
+const SHELL_ALLOWLIST = new Set([
+  'git', 'node', 'pnpm', 'npm', 'python', 'python3', 'npx', 'tsx',
+]);
+
+function hasUnquotedMetacharacters(command: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (SHELL_METACHARACTERS.test(ch)) return true;
+  }
+  return false;
+}
+
 function evaluateShellCommand(command: string, config: GravityClawConfig): ToolPolicyResult {
   if (!command) {
     return { allowed: false, error: 'Shell execution requires a non-empty command.' };
   }
 
-  if (SHELL_SEPARATORS.test(command)) {
+  if (hasUnquotedMetacharacters(command)) {
     return {
       allowed: false,
-      error: 'Shell policy blocks chained commands, pipes, and multiline execution in Gravity Claw v1.',
+      error: 'Shell policy blocks chained commands, pipes, redirection, command substitution, and multiline execution.',
     };
   }
 
   const tokens = tokenize(command);
-  if (tokens[0] !== 'git') {
-    return { allowed: true };
+  if (tokens.length === 0) {
+    return { allowed: false, error: 'Shell execution requires a non-empty command.' };
+  }
+
+  const baseCmd = tokens[0];
+  if (!SHELL_ALLOWLIST.has(baseCmd)) {
+    return {
+      allowed: false,
+      error: `Command "${baseCmd}" is not in the Gravity Claw shell allowlist.`,
+    };
   }
 
   if (!config.gitPipelineEnabled) {
@@ -93,6 +161,11 @@ function evaluateShellCommand(command: string, config: GravityClawConfig): ToolP
       allowed: false,
       error: 'That git command is outside the current Gravity Claw allowlist for autonomous execution.',
     };
+  }
+
+  const addCommitCheck = validateGitAddCommit(tokens);
+  if (addCommitCheck) {
+    return addCommitCheck;
   }
 
   return { allowed: true };

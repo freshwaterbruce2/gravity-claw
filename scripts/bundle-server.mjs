@@ -18,6 +18,7 @@ const OUT_DIR = path.join(APP_ROOT, 'server', 'dist');
 // ESM format required: server uses top-level await and import.meta.url
 const OUT_FILE = path.join(OUT_DIR, 'bundle.mjs');
 
+fs.rmSync(OUT_DIR, { recursive: true, force: true });
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 await build({
@@ -28,8 +29,8 @@ await build({
   format: 'esm',
   outfile: OUT_FILE,
   // node: built-ins (node:*, fs, path, net, etc.) are automatically external
-  // with platform:node. Only need to explicitly exclude electron.
-  external: ['electron'],
+  // with platform:node.
+  external: [],
   sourcemap: 'linked',
   logLevel: 'info',
   banner: {

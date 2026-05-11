@@ -200,9 +200,8 @@ function SettingsForm() {
             ✓ Configuration saved
           </div>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-save"
             onClick={handleSave}
-            style={{ height: 42, paddingInline: 'var(--sp-8)' }}
           >
             {saved ? '✓ SAVED' : 'SAVE CHANGES'}
           </button>

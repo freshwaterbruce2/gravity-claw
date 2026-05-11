@@ -7,12 +7,30 @@
   overflow: hidden;
 }
 
+.tasks-page h3 {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.tasks-page p {
+  font-size: var(--text-sm);
+}
+
 .tasks-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-4);
   flex-shrink: 0;
+}
+
+.tasks-header-title {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.tasks-header-subtitle {
+  font-size: var(--text-sm);
 }
 
 .add-task-bar {
@@ -158,6 +176,15 @@
 
 .task-progress {
   margin-top: var(--sp-1);
+}
+
+.task-progress-header {
+  margin-bottom: 4px;
+}
+
+.task-progress-label,
+.task-progress-value {
+  font-size: 10px;
 }
 
 .task-meta {

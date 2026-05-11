@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { callMemoryTool } from './memory.js';
 
-const MAX_HISTORY_CHARS = 3_200_000;
+const MAX_HISTORY_CHARS = 100_000;
 const MAX_SINGLE_MESSAGE_CHARS = 200_000;
 const MIN_KEEP = 4;
 
@@ -45,7 +45,7 @@ export function trimHistory(
       }).catch((err) => { console.warn('[memory] failed to log history trim:', err); });
     }
     trimmed.unshift({
-      role: 'user',
+      role: 'model',
       content: `[System: ${dropped} older message(s) were trimmed to stay within context limits. Continue from the most recent context.]`,
     });
   }

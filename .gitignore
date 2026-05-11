@@ -15,3 +15,6 @@ release/
 
 # Tauri CLI generated bindings / assets (regenerate with `tauri dev` / `tauri build`)
 src-tauri/gen/
+
+# Server build output
+server/dist/

@@ -165,6 +165,8 @@ export const useTaskStore = create<TaskState>((set, get) => {
         ? await updateTaskOnServer(id, {
             status: nextTask.status,
             progress: nextTask.progress,
+            startedAt: nextTask.startedAt,
+            completedAt: nextTask.completedAt,
           })
         : null;
 
@@ -188,10 +190,16 @@ export const useTaskStore = create<TaskState>((set, get) => {
     },
 
     removeTask: async (id, options) => {
-      const next = get().tasks.filter((task) => task.id !== id);
       if (options?.sync ?? true) {
-        await deleteTaskOnServer(id);
+        try {
+          await deleteTaskOnServer(id);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Delete failed';
+          console.error('[tasks] Server delete failed, keeping local task:', msg);
+          return;
+        }
       }
+      const next = get().tasks.filter((task) => task.id !== id);
       await commitTasks(next, false);
     },
   };

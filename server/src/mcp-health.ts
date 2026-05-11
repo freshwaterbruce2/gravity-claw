@@ -1,6 +1,13 @@
 import type { EventBus } from './event-bus.js';
 import { extractGatewayServerList, extractGatewayTools } from './mcp.js';
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const POLL_INTERVAL_MS = 15_000;
+const MCP_GATEWAY_URL = 'http://localhost:3100';
+const FETCH_TIMEOUT_MS = 10_000;
+const DEGRADED_LATENCY_MS = 5_000;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface McpServerHealth {
@@ -46,19 +53,15 @@ export async function fetchMcpHealth(): Promise<McpServerHealth[]> {
     });
 
     results.push(...(await Promise.all(checks)));
-  } catch {
-    // Gateway itself is unreachable — return an empty list.
+  } catch (err: unknown) {
+    // Gateway itself is unreachable — return a synthetic offline record.
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[mcp-health] Gateway unreachable:', message);
+    return [{ server: 'gateway', status: 'offline', toolCount: 0, latencyMs: 0, lastChecked: Date.now() }];
   }
 
   return results;
 }
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const POLL_INTERVAL_MS = 15_000;
-const MCP_GATEWAY_URL = 'http://localhost:3100';
-const FETCH_TIMEOUT_MS = 10_000;
-const DEGRADED_LATENCY_MS = 5_000;
 
 // ── Poller ───────────────────────────────────────────────────────────────────
 

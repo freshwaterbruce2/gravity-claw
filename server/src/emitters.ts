@@ -13,7 +13,7 @@ export function keepRecent<T>(collection: T[], next: T, limit: number) {
   if (collection.length > limit) collection.length = limit;
 }
 
-export function emitLog(level: string, message: string, source: string) {
+export function emitLog(level: LogEntryRecord['level'], message: string, source: string) {
   const entry: LogEntryRecord = { level, message, source, ts: Date.now() };
   keepRecent(state.recentLogs, entry, RECENT_EVENT_LIMIT);
   state.eventBus.emit('log.entry', entry);

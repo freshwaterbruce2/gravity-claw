@@ -123,7 +123,14 @@ function createConfiguredChannel(
   };
 }
 
+const VALID_INTEGRATION_STATUSES: IntegrationStatus[] = ['online', 'offline', 'degraded', 'disabled', 'configured'];
+
 export function setTelegramBridgeStatus(nextStatus: Partial<TelegramBridgeState>) {
+  if (nextStatus.status && !VALID_INTEGRATION_STATUSES.includes(nextStatus.status)) {
+    console.warn('[integrations] Ignoring invalid telegram status:', nextStatus.status);
+    delete nextStatus.status;
+  }
+
   telegramBridgeStatus = {
     ...telegramBridgeStatus,
     ...nextStatus,

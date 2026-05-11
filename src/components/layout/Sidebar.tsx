@@ -71,11 +71,11 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         </div>
       </div>
 
-      <div className="divider" style={{ margin: '0' }} />
+      <div className="divider" />
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        <div className="section-title" style={{ padding: '0 12px', marginBottom: '8px' }}>
+        <div className="nav-section-label">
           NAVIGATION
         </div>
         {NAV_ITEMS.map((item) => (
@@ -93,7 +93,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
       {/* Footer */}
       <div className="sidebar-footer">
-        <div className="font-code text-xs text-muted" style={{ lineHeight: 1.8 }}>
+        <div className="sidebar-footer-text font-code text-xs text-muted">
           <div>◈ INSPIRED BY OPENCLAW</div>
           <div>◉ VIBE-TECH MONOREPO</div>
         </div>

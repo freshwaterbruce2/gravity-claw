@@ -29,12 +29,14 @@ async function initTauriBridge(): Promise<void> {
 
   (window as any).gravityClawDesktop = {
     auth: {
-      getSession: () => invoke<{ gemini_key: string | null; kimi_key: string | null }>('auth_get_session'),
+      getSession: () =>
+        invoke<{ gemini_key: string | null; kimi_key: string | null }>('auth_get_session').then(
+          (s) => ({ geminiKey: s.gemini_key, kimiKey: s.kimi_key }),
+        ),
       setGeminiKey: (apiKey: string) => invoke('auth_set_gemini_key', { apiKey }),
       setKimiKey: (apiKey: string) => invoke('auth_set_kimi_key', { apiKey }),
       clearSession: () => invoke('auth_clear_session'),
-    },
-    storage: {
+    },    storage: {
       getItem: (key: string) => invoke<string | null>('storage_get_item', { key }),
       setItem: (key: string, value: string) => invoke('storage_set_item', { key, value }),
       removeItem: (key: string) => invoke('storage_remove_item', { key }),

@@ -1,6 +1,6 @@
 # Gravity Claw
 
-Gravity Claw is an AI agent orchestrator with a React frontend and Hono backend. It routes conversations through Gemini models, dispatches tool calls to MCP servers, manages tasks, and bridges to messaging platforms (Telegram, Discord, WhatsApp, Email). An optional Electron shell wraps the web UI for desktop use.
+Gravity Claw is an AI agent orchestrator with a React frontend and Hono backend. It routes conversations through Gemini models, dispatches tool calls to MCP servers, manages tasks, and bridges to messaging platforms (Telegram, Discord, WhatsApp, Email). An optional Tauri 2 shell wraps the web UI for desktop use.
 
 ## Architecture
 
@@ -52,8 +52,8 @@ pnpm --filter gravity-claw test
 pnpm --filter gravity-claw typecheck
 pnpm --filter gravity-claw typecheck:server
 
-# Desktop (Electron)
-pnpm --filter gravity-claw desktop:dev
+# Desktop (Tauri)
+pnpm --filter gravity-claw tauri:dev
 ```
 
 ## API Endpoints
@@ -104,7 +104,7 @@ Create a `.env` file in `apps/gravity-claw/`:
 | `GEMINI_API_KEY` | Yes | Google Gemini API key |
 | `KIMI_API_KEY` | No | Kimi (Moonshot) API key for alternate model |
 | `TELEGRAM_BOT_TOKEN` | No | Telegraf bot token for Telegram bridge |
-| `MCP_GATEWAY_URL` | No | MCP gateway base URL (default: auto-discovered) |
+| `MCP_GATEWAY_URL` | No | MCP gateway base URL (default: `http://localhost:3100`) |
 
 ## Ports
 

@@ -72,6 +72,95 @@ test('fetchMcpHealth reads gateway server payloads shaped as { servers: [...] }'
   }
 });
 
+test('fetchMcpHealth returns empty results on 500 from gateway', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url === 'http://localhost:3100/servers') {
+      return new Response('Internal Server Error', { status: 500 });
+    }
+
+    throw new Error(`Unexpected URL in test: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const results = await fetchMcpHealth();
+    assert.deepEqual(results, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchMcpHealth returns offline gateway on timeout', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () => {
+    throw new Error('The operation was aborted');
+  }) as typeof fetch;
+
+  try {
+    const results = await fetchMcpHealth();
+    assert.equal(results.length, 1);
+    assert.equal(results[0]?.server, 'gateway');
+    assert.equal(results[0]?.status, 'offline');
+    assert.equal(results[0]?.toolCount, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchMcpHealth handles malformed JSON gracefully', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url === 'http://localhost:3100/servers') {
+      return new Response('not-json', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected URL in test: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const results = await fetchMcpHealth();
+    assert.equal(results.length, 1);
+    assert.equal(results[0]?.server, 'gateway');
+    assert.equal(results[0]?.status, 'offline');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchMcpHealth handles empty server list', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url === 'http://localhost:3100/servers') {
+      return new Response(JSON.stringify({ servers: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected URL in test: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const results = await fetchMcpHealth();
+    assert.deepEqual(results, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('buildIntegrationSnapshot marks the MCP gateway degraded when some servers are offline', () => {
   const snapshot = buildIntegrationSnapshot(
     TEST_CONFIG,

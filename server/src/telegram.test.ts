@@ -10,8 +10,8 @@ import {
 
 test('parseAllowedTelegramUserIds trims values and ignores invalid entries', () => {
   assert.deepEqual(
-    parseAllowedTelegramUserIds(' 12345, not-a-number, -67890, , 42 '),
-    [12345, -67890, 42],
+    parseAllowedTelegramUserIds(' 12345, not-a-number, -67890, 0, , 42 '),
+    [12345, 42],
   );
 });
 
@@ -61,12 +61,13 @@ test('handleTelegramText forwards authorized message to LLM and replies', async 
   t.mock.method(console, 'log');
   const replies: string[] = [];
   let receivedText = '';
+  let chatActions = 0;
   const genAI = { marker: 'real-genai-instance' } as never;
 
   const ctx: TelegramTextContext = {
     from: { id: 12345, username: 'bruce' },
     message: { text: 'hello agent' },
-    sendChatAction: async () => {},
+    sendChatAction: async () => { chatActions++; },
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {
@@ -82,6 +83,7 @@ test('handleTelegramText forwards authorized message to LLM and replies', async 
   await handleTelegramText(ctx, deps);
 
   assert.equal(receivedText, 'hello agent');
+  assert.equal(chatActions, 1, 'should call sendChatAction for authorized user');
   assert.deepEqual(replies, ['agent response']);
 });
 
@@ -106,19 +108,43 @@ test('handleTelegramText sends fallback message when LLM returns no text', async
   assert.deepEqual(replies, ['System: No text generated.']);
 });
 
+test('handleTelegramText rate-limits excessive messages from the same user', async (t) => {
+  t.mock.method(console, 'log');
+  const replies: string[] = [];
+
+  const ctx: TelegramTextContext = {
+    from: { id: 42, username: 'bruce' },
+    message: { text: 'spam' },
+    sendChatAction: async () => {},
+    reply: async (text: string) => { replies.push(text); },
+  };
+  const deps: TelegramHandlerDeps = {
+    allowedUserIds: [42],
+    genAI: {} as never,
+    sendWithFallback: async () => 'ok',
+  };
+
+  for (let i = 0; i < 12; i++) {
+    await handleTelegramText(ctx, deps);
+  }
+
+  const rateLimitReplies = replies.filter((r) => r.includes('too quickly'));
+  assert.ok(rateLimitReplies.length >= 1, 'expected at least one rate-limit reply');
+});
+
 test('handleTelegramText surfaces LLM errors back to the user', async (t) => {
   t.mock.method(console, 'log');
   t.mock.method(console, 'error');
   const replies: string[] = [];
 
   const ctx: TelegramTextContext = {
-    from: { id: 42, username: 'bruce' },
+    from: { id: 43, username: 'bruce' },
     message: { text: 'please break' },
     sendChatAction: async () => {},
     reply: async (text: string) => { replies.push(text); },
   };
   const deps: TelegramHandlerDeps = {
-    allowedUserIds: [42],
+    allowedUserIds: [43],
     genAI: {} as never,
     sendWithFallback: async () => { throw new Error('upstream down'); },
   };
@@ -127,4 +153,55 @@ test('handleTelegramText surfaces LLM errors back to the user', async (t) => {
 
   assert.equal(replies.length, 1);
   assert.match(replies[0], /G-CLAW Error.*upstream down/);
+});
+
+test('isTelegramUserAllowed rejects negative and zero user IDs', () => {
+  assert.equal(isTelegramUserAllowed(-1, [12345]), false);
+  assert.equal(isTelegramUserAllowed(0, [12345]), false);
+  assert.equal(isTelegramUserAllowed(-999, [12345]), false);
+});
+
+test('handleTelegramText handles empty message text', async (t) => {
+  t.mock.method(console, 'log');
+  const replies: string[] = [];
+
+  const ctx: TelegramTextContext = {
+    from: { id: 44, username: 'bruce' },
+    message: { text: '' },
+    sendChatAction: async () => {},
+    reply: async (text: string) => { replies.push(text); },
+  };
+  const deps: TelegramHandlerDeps = {
+    allowedUserIds: [44],
+    genAI: {} as never,
+    sendWithFallback: async () => 'ack',
+  };
+
+  await handleTelegramText(ctx, deps);
+
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0], 'ack');
+});
+
+test('handleTelegramText chunks replies longer than 4096 characters', async (t) => {
+  t.mock.method(console, 'log');
+  const replies: string[] = [];
+
+  const ctx: TelegramTextContext = {
+    from: { id: 45, username: 'bruce' },
+    message: { text: 'long' },
+    sendChatAction: async () => {},
+    reply: async (text: string) => { replies.push(text); },
+  };
+  const deps: TelegramHandlerDeps = {
+    allowedUserIds: [45],
+    genAI: {} as never,
+    sendWithFallback: async () => 'a'.repeat(5000),
+  };
+
+  await handleTelegramText(ctx, deps);
+
+  assert.equal(replies.length, 2);
+  assert.equal(replies[0]?.length, 4096);
+  assert.equal(replies[1]?.length, 904);
 });

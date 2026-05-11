@@ -93,14 +93,7 @@ export default function LoginScreen() {
         </h1>
 
         <div className="auth-option">
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: '0.75rem',
-              marginBottom: '1rem',
-            }}
-          >
+          <div className="auth-provider-grid">
             <button
               className={provider === 'gemini' ? 'btn btn-primary' : 'btn btn-ghost'}
               onClick={() => {
@@ -165,7 +158,7 @@ export default function LoginScreen() {
           {keyError && <p className="key-error font-code text-xs">{keyError}</p>}
         </div>
 
-        <div className="login-footer font-code text-xs text-muted" style={{ marginTop: '1rem' }}>
+        <div className="login-footer font-code text-xs text-muted">
           Personal use only · Vibe-Tech Monorepo
         </div>
       </div>

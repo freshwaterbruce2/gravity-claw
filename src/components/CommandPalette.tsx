@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Page } from '../App';
 import { useSkillsStore } from '../stores/skillsStore';
 import './CommandPalette.css';
@@ -24,14 +24,21 @@ const PAGES: { page: Page; icon: string; label: string; key: string }[] = [
   { page: 'skills', icon: '⬡', label: 'Skill Browser', key: '3' },
   { page: 'tasks', icon: '▦', label: 'Task Board', key: '4' },
   { page: 'console', icon: '▶', label: 'Agent Console', key: '5' },
-  { page: 'settings', icon: '⚙', label: 'Configuration', key: '6' },
+  { page: 'settings', icon: '◌', label: 'Configuration', key: '6' },
 ];
+
+const SKILLS_STALE_MS = 60_000;
 
 export default function CommandPalette({ open, onClose, onNavigate }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { skills, loadSkills } = useSkillsStore();
+  const { skills, loadSkills, lastUpdated } = useSkillsStore();
+
+  const handleNavigate = useCallback((page: Page) => {
+    onNavigate(page);
+    onClose();
+  }, [onNavigate, onClose]);
 
   const items = useMemo<PaletteItem[]>(() => {
     const list: PaletteItem[] = [];
@@ -44,10 +51,7 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
         label: p.label,
         hint: p.key,
         group: 'Navigate',
-        action: () => {
-          onNavigate(p.page);
-          onClose();
-        },
+        action: () => handleNavigate(p.page),
       });
     }
 
@@ -62,10 +66,7 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
         label: s.name,
         hint: s.category,
         group: 'Skills',
-        action: () => {
-          onNavigate('chat');
-          onClose();
-        },
+        action: () => handleNavigate('chat'),
       });
     }
 
@@ -76,14 +77,11 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
       label: 'Open Console',
       hint: 'Ctrl+/',
       group: 'Actions',
-      action: () => {
-        onNavigate('console');
-        onClose();
-      },
+      action: () => handleNavigate('console'),
     });
 
     return list;
-  }, [onNavigate, onClose, skills]);
+  }, [handleNavigate, skills]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return items;
@@ -96,20 +94,22 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
     );
   }, [items, query]);
 
-  // Reset on open
-  useEffect(() => {
+  // Reset on open and focus input (layout effect for DOM synchronization).
+  useLayoutEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery('');
       setActiveIdx(0);
-      void loadSkills();
+      const stale = !lastUpdated || Date.now() - lastUpdated > SKILLS_STALE_MS;
+      if (stale) {
+        void loadSkills({ force: true });
+      }
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [loadSkills, open]);
+  }, [loadSkills, open, lastUpdated]);
 
-  // Clamp active index
-  useEffect(() => {
-    setActiveIdx((prev) => Math.min(prev, Math.max(0, filtered.length - 1)));
-  }, [filtered.length]);
+  // Clamp active index to valid range during render instead of in an effect
+  const safeActiveIdx = Math.min(activeIdx, Math.max(0, filtered.length - 1));
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'ArrowDown') {
@@ -118,27 +118,40 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIdx((i) => (i - 1 + filtered.length) % filtered.length);
-    } else if (e.key === 'Enter' && filtered[activeIdx]) {
-      filtered[activeIdx].action();
+    } else if (e.key === 'Enter' && filtered[safeActiveIdx]) {
+      filtered[safeActiveIdx].action();
     } else if (e.key === 'Escape') {
       onClose();
     }
   }
 
+  // Group items for display (memoized to stabilize reference for useMemo below)
+  const groups = useMemo(() => {
+    const map = new Map<string, PaletteItem[]>();
+    for (const item of filtered) {
+      const list = map.get(item.group) ?? [];
+      list.push(item);
+      map.set(item.group, list);
+    }
+    return map;
+  }, [filtered]);
+
+  // Pre-compute flat indices to avoid mutation during render
+  const itemIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let idx = 0;
+    for (const [, groupItems] of groups) {
+      for (const item of groupItems) {
+        map.set(item.id, idx++);
+      }
+    }
+    return map;
+  }, [groups]);
+
   if (!open) return null;
 
-  // Group items for display
-  const groups = new Map<string, PaletteItem[]>();
-  for (const item of filtered) {
-    const list = groups.get(item.group) ?? [];
-    list.push(item);
-    groups.set(item.group, list);
-  }
-
-  let flatIdx = 0;
-
   return (
-    <div className="palette-overlay" onClick={onClose}>
+    <div className="palette-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="palette" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         <div className="palette-input-wrap">
           <span className="palette-search-icon">⌕</span>
@@ -148,6 +161,7 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
             placeholder="Search pages, skills, actions..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Command palette search"
           />
           <span className="palette-kbd">ESC</span>
         </div>
@@ -158,13 +172,16 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
             <div key={group}>
               <div className="palette-group-label">{group}</div>
               {groupItems.map((item) => {
-                const idx = flatIdx++;
+                const idx = itemIndexMap.get(item.id) ?? 0;
                 return (
                   <div
                     key={item.id}
-                    className={`palette-item${idx === activeIdx ? ' palette-item--active' : ''}`}
+                    className={`palette-item${idx === safeActiveIdx ? ' palette-item--active' : ''}`}
                     onClick={item.action}
                     onMouseEnter={() => setActiveIdx(idx)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.action(); } }}
                   >
                     <span className="palette-item-icon">{item.icon}</span>
                     <span className="palette-item-label">{item.label}</span>

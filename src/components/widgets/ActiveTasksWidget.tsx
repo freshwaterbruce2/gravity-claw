@@ -50,8 +50,7 @@ export default function ActiveTasksWidget({ onNavigate }: ActiveTasksWidgetProps
       <div className="section-header">
         <span className="section-title">ACTIVE TASKS</span>
         <button
-          className="btn btn-ghost"
-          style={{ height: 26, fontSize: 11 }}
+          className="btn btn-ghost btn-xs"
           onClick={() => onNavigate('tasks')}
         >
           View all
@@ -61,9 +60,9 @@ export default function ActiveTasksWidget({ onNavigate }: ActiveTasksWidgetProps
       <div className="widget-task-donut-row">
         <TaskDonut running={running.length} backlog={backlog} done={done} />
         <div className="widget-task-legend">
-          <span className="font-code text-amber" style={{ fontSize: 10 }}>{running.length} running</span>
-          <span className="font-code text-cyan" style={{ fontSize: 10 }}>{backlog} backlog</span>
-          <span className="font-code text-green" style={{ fontSize: 10 }}>{done} done</span>
+          <span className="font-code text-amber widget-task-legend-item">{running.length} running</span>
+          <span className="font-code text-cyan widget-task-legend-item">{backlog} backlog</span>
+          <span className="font-code text-green widget-task-legend-item">{done} done</span>
         </div>
       </div>
 

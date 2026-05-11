@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 export type TaskStatus = 'backlog' | 'running' | 'done';
@@ -44,10 +45,29 @@ export interface TaskSummary {
   averageProgress: number;
 }
 
-const TASKS_PATH = path.join(process.cwd(), '.gravity-claw.tasks.json');
+function getTasksPath(): string {
+  const envPath = process.env.GRAVITY_CLAW_TASKS_PATH?.trim();
+  if (envPath) return path.resolve(envPath);
+  return path.resolve(process.cwd(), '.gravity-claw.tasks.json');
+}
+
 const DEFAULT_STATUS: TaskStatus = 'backlog';
 
 let cachedTasks: TaskRecord[] | null = null;
+
+// Simple async mutex to prevent concurrent RMW races
+let taskLock: Promise<unknown> = Promise.resolve();
+async function withTaskLock<T>(fn: () => Promise<T>): Promise<T> {
+  const release = taskLock.then(() => {});
+  let resolve!: (value: unknown) => void;
+  taskLock = new Promise((res) => { resolve = res; });
+  await release;
+  try {
+    return await fn();
+  } finally {
+    resolve(undefined);
+  }
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -84,7 +104,7 @@ function normalizeTask(task: Partial<TaskRecord> & Pick<TaskRecord, 'id' | 'titl
 
 async function loadFromDisk(): Promise<TaskRecord[]> {
   try {
-    const raw = await readFile(TASKS_PATH, 'utf8');
+    const raw = await readFile(getTasksPath(), 'utf8');
     const parsed = JSON.parse(raw) as { tasks?: Partial<TaskRecord>[] };
     if (!Array.isArray(parsed.tasks)) {
       return [];
@@ -93,14 +113,29 @@ async function loadFromDisk(): Promise<TaskRecord[]> {
       .filter((task): task is Partial<TaskRecord> & Pick<TaskRecord, 'id' | 'title' | 'skill' | 'priority'> =>
         Boolean(task && typeof task.id === 'string' && typeof task.title === 'string' && typeof task.skill === 'string' && typeof task.priority === 'string'))
       .map((task) => normalizeTask(task));
-  } catch {
+  } catch (err: unknown) {
+    // If file does not exist, that's fine — return empty array.
+    if (typeof err === 'object' && err && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    // For parse errors or other read failures, backup the corrupted file and log.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[tasks] loadFromDisk failed:', msg);
+    if (existsSync(getTasksPath())) {
+      const backupPath = `${getTasksPath()}.corrupted.${Date.now()}.json`;
+      await readFile(getTasksPath(), 'utf8')
+        .then((data) => writeFile(backupPath, data, 'utf8'))
+        .then(() => console.error(`[tasks] backed up corrupted file to ${backupPath}`))
+        .catch((backupErr) => console.error('[tasks] failed to backup corrupted file:', backupErr));
+    }
     return [];
   }
 }
 
 async function persistTasks(tasks: TaskRecord[]): Promise<void> {
-  await mkdir(path.dirname(TASKS_PATH), { recursive: true });
-  await writeFile(TASKS_PATH, JSON.stringify({ tasks }, null, 2), 'utf8');
+  const tasksPath = getTasksPath();
+  await mkdir(path.dirname(tasksPath), { recursive: true });
+  await writeFile(tasksPath, JSON.stringify({ tasks }, null, 2), 'utf8');
 }
 
 function ensureCache(tasks: TaskRecord[]) {
@@ -122,27 +157,36 @@ export async function getTaskById(taskId: string): Promise<TaskRecord | null> {
 }
 
 export async function createTask(input: TaskInput): Promise<TaskRecord> {
-  const tasks = await listTasks();
-  const createdAt = nowIso();
-  const status = input.status ?? DEFAULT_STATUS;
-  const task: TaskRecord = normalizeTask({
-    id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    title: input.title.trim(),
-    skill: input.skill.trim(),
-    priority: input.priority,
-    status,
-    progress: input.progress ?? (status === 'done' ? 100 : 0),
-    description: input.description?.trim() || undefined,
-    createdAt,
-    updatedAt: createdAt,
-    startedAt: status === 'running' ? createdAt : undefined,
-    completedAt: status === 'done' ? createdAt : undefined,
-  });
+  return withTaskLock(async () => {
+    const tasks = await listTasks();
+    const createdAt = nowIso();
+    const status = input.status ?? DEFAULT_STATUS;
+    const title = input.title.trim();
+    const skill = input.skill.trim();
 
-  const nextTasks = [task, ...tasks];
-  await persistTasks(nextTasks);
-  ensureCache(nextTasks);
-  return { ...task };
+    if (!title || !skill) {
+      throw new Error('Task title and skill are required (cannot be empty).');
+    }
+
+    const task: TaskRecord = normalizeTask({
+      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title,
+      skill,
+      priority: input.priority,
+      status,
+      progress: input.progress ?? (status === 'done' ? 100 : 0),
+      description: input.description?.trim() || undefined,
+      createdAt,
+      updatedAt: createdAt,
+      startedAt: status === 'running' ? createdAt : undefined,
+      completedAt: status === 'done' ? createdAt : undefined,
+    });
+
+    const nextTasks = [task, ...tasks];
+    await persistTasks(nextTasks);
+    ensureCache(nextTasks);
+    return { ...task };
+  });
 }
 
 export function applyStatusTransition(task: TaskRecord, patch: TaskPatch, timestamp: string): TaskRecord {
@@ -180,38 +224,44 @@ export function applyStatusTransition(task: TaskRecord, patch: TaskPatch, timest
 }
 
 export async function updateTask(taskId: string, patch: TaskPatch): Promise<TaskRecord | null> {
-  const tasks = await listTasks();
-  const index = tasks.findIndex((task) => task.id === taskId);
-  if (index === -1) {
-    return null;
-  }
+  return withTaskLock(async () => {
+    const tasks = await listTasks();
+    const index = tasks.findIndex((task) => task.id === taskId);
+    if (index === -1) {
+      return null;
+    }
 
-  const timestamp = nowIso();
-  const updated = applyStatusTransition(tasks[index], patch, timestamp);
-  const nextTasks = tasks.map((task) => (task.id === taskId ? updated : task));
-  await persistTasks(nextTasks);
-  ensureCache(nextTasks);
-  return { ...updated };
+    const timestamp = nowIso();
+    const updated = applyStatusTransition(tasks[index], patch, timestamp);
+    const nextTasks = tasks.map((task) => (task.id === taskId ? updated : task));
+    await persistTasks(nextTasks);
+    ensureCache(nextTasks);
+    return { ...updated };
+  });
 }
 
 export async function removeTask(taskId: string): Promise<TaskRecord | null> {
-  const tasks = await listTasks();
-  const nextTasks = tasks.filter((task) => task.id !== taskId);
-  if (nextTasks.length === tasks.length) {
-    return null;
-  }
+  return withTaskLock(async () => {
+    const tasks = await listTasks();
+    const nextTasks = tasks.filter((task) => task.id !== taskId);
+    if (nextTasks.length === tasks.length) {
+      return null;
+    }
 
-  const removed = tasks.find((task) => task.id === taskId) ?? null;
-  await persistTasks(nextTasks);
-  ensureCache(nextTasks);
-  return removed ? { ...removed } : null;
+    const removed = tasks.find((task) => task.id === taskId) ?? null;
+    await persistTasks(nextTasks);
+    ensureCache(nextTasks);
+    return removed ? { ...removed } : null;
+  });
 }
 
 export async function replaceTasks(tasks: TaskRecord[]): Promise<TaskRecord[]> {
-  const normalized = tasks.map((task) => normalizeTask(task));
-  await persistTasks(normalized);
-  ensureCache(normalized);
-  return normalized.map((task) => ({ ...task }));
+  return withTaskLock(async () => {
+    const normalized = tasks.map((task) => normalizeTask(task));
+    await persistTasks(normalized);
+    ensureCache(normalized);
+    return normalized.map((task) => ({ ...task }));
+  });
 }
 
 export async function summarizeTasks(): Promise<TaskSummary> {

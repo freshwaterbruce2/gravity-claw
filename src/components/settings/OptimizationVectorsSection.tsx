@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { OPTIMIZATION_VECTORS } from '../../data/systemProfile';
 import ToggleInput from './ToggleInput';
 
@@ -18,12 +19,12 @@ export default function OptimizationVectorsSection({
   workspaceWatchers, setWorkspaceWatchers,
   gitPipeline, setGitPipeline,
 }: OptimizationVectorsSectionProps) {
-  const stateMap: Record<string, { checked: boolean; onChange: (v: boolean) => void }> = {
+  const stateMap = useMemo(() => ({
     vectorMemory: { checked: vectorMemory, onChange: setVectorMemory },
     directShell: { checked: directShell, onChange: setDirectShell },
     workspaceWatchers: { checked: workspaceWatchers, onChange: setWorkspaceWatchers },
     gitPipeline: { checked: gitPipeline, onChange: setGitPipeline },
-  };
+  }), [vectorMemory, setVectorMemory, directShell, setDirectShell, workspaceWatchers, setWorkspaceWatchers, gitPipeline, setGitPipeline]);
 
   return (
     <section className="settings-section card">

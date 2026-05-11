@@ -5,8 +5,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'server', 'electron', 'scripts', '*.config.js', '*.config.ts'] },
-  {
+  { ignores: ['dist', 'src-tauri', '*.config.js', '*.config.ts'] },  {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
     languageOptions: {

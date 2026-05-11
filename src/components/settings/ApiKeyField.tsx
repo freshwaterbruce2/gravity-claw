@@ -28,32 +28,25 @@ export default function ApiKeyField({
         <div className="settings-hint" dangerouslySetInnerHTML={{ __html: hint }} />
       </div>
       <div className="key-field-wrap">
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ position: 'relative', flex: 1 }}>
+        <div className="key-field-row">
+          <div className="key-field-input-wrap">
             <input
-              className="settings-input"
+              className="settings-input key-field-input"
               type={show ? 'text' : 'password'}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder}
-              style={{ width: '100%', fontFamily: 'var(--font-code)', fontSize: 12, paddingRight: 52 }}
             />
             <button
-              className="key-toggle-btn font-code text-xs"
+              className="key-toggle-btn font-code text-xs key-field-toggle"
               onClick={() => setShow((v) => !v)}
               type="button"
-              style={{
-                position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
-                border: 'none', letterSpacing: '0.08em',
-              }}
             >
               {show ? 'HIDE' : 'SHOW'}
             </button>
           </div>
           <button
-            className="btn btn-primary"
-            style={{ height: 38, fontSize: 12, whiteSpace: 'nowrap' }}
+            className="btn btn-primary key-field-save"
             onClick={onSave}
             disabled={!value.trim()}
           >

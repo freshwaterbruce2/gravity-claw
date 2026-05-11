@@ -15,10 +15,12 @@ export function parseAllowedTelegramUserIds(
     return [];
   }
 
-  return rawValue
+  const ids = rawValue
     .split(',')
     .map((value) => Number.parseInt(value.trim(), 10))
-    .filter((value): value is number => Number.isInteger(value));
+    .filter((value): value is number => Number.isInteger(value) && value > 0);
+
+  return [...new Set(ids)];
 }
 
 export function isTelegramUserAllowed(
@@ -53,6 +55,22 @@ type TelegrafLoadResult =
   | { ok: true; Telegraf: TelegrafModule['Telegraf'] }
   | { ok: false; details: string };
 
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_PER_WINDOW = 10;
+const userRateLimits = new Map<number, number[]>();
+
+function isRateLimited(userId: number): boolean {
+  const now = Date.now();
+  const timestamps = userRateLimits.get(userId) ?? [];
+  const withinWindow = timestamps.filter((ts) => now - ts < RATE_LIMIT_WINDOW_MS);
+  userRateLimits.set(userId, withinWindow);
+  if (withinWindow.length >= RATE_LIMIT_MAX_PER_WINDOW) {
+    return true;
+  }
+  withinWindow.push(now);
+  return false;
+}
+
 export interface TelegramHandlerDeps {
   allowedUserIds: number[];
   genAI: GoogleGenerativeAI;
@@ -63,10 +81,16 @@ export async function handleTelegramText(
   ctx: TelegramTextContext,
   deps: TelegramHandlerDeps,
 ): Promise<void> {
-  if (!isTelegramUserAllowed(ctx.from?.id, deps.allowedUserIds)) {
+  const userId = ctx.from?.id;
+  if (!isTelegramUserAllowed(userId, deps.allowedUserIds)) {
     console.log(
-      `\n  🚫 Rejected message from unauthorized user: ${ctx.from?.id} (${ctx.from?.username || ctx.from?.first_name})`,
+      `\n  🚫 Rejected message from unauthorized user: ${userId} (${ctx.from?.username || ctx.from?.first_name})`,
     );
+    return;
+  }
+  if (userId !== undefined && isRateLimited(userId)) {
+    console.log(`\n  🚫 Rate limited user ${userId}`);
+    await ctx.reply('You are sending messages too quickly. Please wait a moment.');
     return;
   }
   const preview = ctx.message.text.substring(0, 50);

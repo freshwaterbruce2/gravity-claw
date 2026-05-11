@@ -38,8 +38,7 @@ export default function AuthSection({
             <div className="settings-hint">{sessionStatus}</div>
           </div>
           <button
-            className="btn btn-ghost"
-            style={{ height: 36, fontSize: 12 }}
+            className="btn btn-ghost btn-sm"
             onClick={onLogout}
           >
             Sign Out

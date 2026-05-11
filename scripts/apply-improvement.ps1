@@ -4,30 +4,38 @@ param (
 
 Write-Host "[*] Gravity Claw Self-Improvement Loop Initiated" -ForegroundColor Cyan
 
-# 1. Run typecheck to ensure changes are valid before applying
+# Ensure type safety before staging to prevent committing broken code that would break downstream consumers
 Write-Host "[*] Verifying changes with typecheck..." -ForegroundColor Yellow
-pnpm run typecheck
+pnpm run typecheck && pnpm run typecheck:server
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Typecheck failed. Aborting self-improvement. Please fix the errors." -ForegroundColor Red
     exit 1
 }
 
-# 2. Add changes to the local Git repository
+# Stage all tracked modifications so the commit captures a complete, atomic improvement set
 Write-Host "[*] Staging changes..." -ForegroundColor Yellow
-git add .
+git add -u
 
-# 3. Check if there are any changes to commit
+# Early exit if nothing changed after typecheck (prevents empty commits)
 $gitStatus = git status --porcelain
 if ([string]::IsNullOrWhiteSpace($gitStatus)) {
     Write-Host "[+] No changes detected. Gravity Claw is already optimized." -ForegroundColor Green
     exit 0
 }
 
-# 4. Commit the changes
+# Run the test suite to guarantee regressions are not introduced by the local optimizations
+Write-Host "[*] Running tests..." -ForegroundColor Yellow
+pnpm run test
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[!] Tests failed. Aborting self-improvement. Please fix the errors." -ForegroundColor Red
+    exit 1
+}
+
+# Persist the verified improvements with a descriptive commit message
 Write-Host "[*] Committing improvements locally..." -ForegroundColor Yellow
 git commit -m $CommitMessage
 
-# 5. Build to ensure production readiness (optional, mostly for verification)
+# Final production build verification (post-commit) to catch any packaging or bundling issues early
 Write-Host "[*] Building project..." -ForegroundColor Yellow
 pnpm run build
 if ($LASTEXITCODE -ne 0) {

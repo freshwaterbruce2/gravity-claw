@@ -106,8 +106,8 @@ export default function Chat() {
 
       {/* Command palette */}
       {showCommands && (
-        <div className="command-palette animate-in">
-          <div className="command-palette-header font-code text-xs text-muted">QUICK COMMANDS</div>
+        <div className="chat-command-palette animate-in">
+          <div className="chat-command-palette-header font-code text-xs text-muted">QUICK COMMANDS</div>
           {QUICK_COMMANDS.map((c) => (
             <button key={c.cmd} className="command-item" onClick={() => selectCommand(c.cmd)}>
               <span className="command-cmd text-amber font-code">{c.cmd}</span>

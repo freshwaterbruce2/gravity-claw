@@ -28,7 +28,7 @@ export default defineConfig({
     },
   },
   build: {
-    // Desktop Electron app — 500 kB web threshold doesn't apply; raise to match reality
+    // Desktop Tauri app — 500 kB web threshold doesn't apply; raise to match reality
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
@@ -41,11 +41,14 @@ export default defineConfig({
   },
   server: {
     port: 5177,
-    host: true,
+    host: '127.0.0.1',
     proxy: {
       '/api': {
         target: resolveBackendTarget(),
         changeOrigin: true,
+        // Vite proxy bypass hack: re-evaluate backend target on every request
+        // so the port file change is picked up without restarting the dev server.
+        // Required for Vite ^7.3.1 — may be revisited after upgrading.
         bypass(_req, _res, options) {
           options.target = resolveBackendTarget();
         },

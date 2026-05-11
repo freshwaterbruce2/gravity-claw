@@ -73,6 +73,61 @@ test('getPreferredBackendPort defaults to 5187 and honors GRAVITY_CLAW_PORT', as
   });
 });
 
+test('getPreferredBackendPort falls back to PORT env variable', async () => {
+  await withEnv('GRAVITY_CLAW_PORT', undefined, async () => {
+    await withEnv('PORT', '7123', async () => {
+      assert.equal(getPreferredBackendPort(), 7123);
+    });
+  });
+});
+
+test('readBackendPortFromFile returns null for invalid port file content', async () => {
+  const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-invalid-'));
+  await writeFile(path.join(appRoot, '.server-port'), 'not-a-number', 'utf8');
+  assert.equal(readBackendPortFromFile(appRoot), null);
+
+  await writeFile(path.join(appRoot, '.server-port'), '-123', 'utf8');
+  assert.equal(readBackendPortFromFile(appRoot), null);
+
+  await writeFile(path.join(appRoot, '.server-port'), '0', 'utf8');
+  assert.equal(readBackendPortFromFile(appRoot), null);
+});
+
+test('waitForBackendPort rejects on timeout', async () => {
+  const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-timeout-'));
+  const childProcess = new EventEmitter();
+
+  await assert.rejects(
+    waitForBackendPort({
+      appRoot,
+      childProcess,
+      preferredPort: 5187,
+      timeoutMs: 100,
+      label: 'test backend',
+    }),
+    /did not expose a reachable backend port within 100ms/,
+  );
+});
+
+test('waitForBackendPort rejects on child process error', async () => {
+  const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-child-error-'));
+  const childProcess = new EventEmitter();
+
+  const pending = waitForBackendPort({
+    appRoot,
+    childProcess,
+    preferredPort: 5187,
+    timeoutMs: 2_000,
+    label: 'test backend',
+  });
+
+  setTimeout(() => {
+    childProcess.emit('error', new Error('spawn failed'));
+  }, 50);
+
+  await assert.rejects(pending, /failed to start: spawn failed/);
+});
+
 test('resolveBackendPort prefers the repo port file over environment defaults', async () => {
   const appRoot = await mkdtemp(path.join(os.tmpdir(), 'gravity-claw-runtime-paths-'));
   const portFile = path.join(appRoot, '.server-port');
