@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 export interface GravityClawPlatformFlags {
@@ -64,10 +65,16 @@ let cachedConfigPath: string | null = null;
 
 function getConfigPath(): string {
   const envPath = process.env.GRAVITY_CLAW_CONFIG_PATH?.trim();
+  if (envPath && envPath.length > 0) {
+    return path.resolve(envPath);
+  }
 
-  return envPath && envPath.length > 0
-    ? path.resolve(envPath)
-    : path.join(process.cwd(), '.gravity-claw.config.json');
+  // Resolve relative to this module so it works regardless of process.cwd().
+  // config.ts is at: server/src/config.ts
+  // config file is at: .gravity-claw.config.json (app root)
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const appRoot = path.resolve(moduleDir, '..', '..');
+  return path.join(appRoot, '.gravity-claw.config.json');
 }
 
 export function sanitizeConfig(
