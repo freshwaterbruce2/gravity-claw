@@ -85,6 +85,8 @@ function SettingsForm() {
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'google' },
     { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'google' },
     { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', provider: 'google' },
+    { id: 'kimi-k2.6', label: 'Kimi K2.6 (latest)', provider: 'moonshot' },
+    { id: 'kimi-k2.6-turbo', label: 'Kimi K2.6 Turbo (fast)', provider: 'moonshot' },
     { id: 'kimi-k2.5', label: 'Kimi K2.5 (256k, multimodal)', provider: 'moonshot' },
     { id: 'kimi-k2-thinking', label: 'Kimi K2 Thinking (deep reasoning)', provider: 'moonshot' },
     { id: 'kimi-k2-thinking-turbo', label: 'Kimi K2 Thinking Turbo (fast)', provider: 'moonshot' },

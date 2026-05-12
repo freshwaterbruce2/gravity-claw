@@ -16,29 +16,109 @@ const LOG_DIR = path.join('D:\\', 'logs', 'gravity-claw');
 
 let db: Database.Database | null = null;
 
-const SCHEMA = `
-  CREATE TABLE IF NOT EXISTS activity_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type  TEXT    NOT NULL,
-    app_source  TEXT    NOT NULL DEFAULT 'gravity-claw',
-    project_id  TEXT,
-    payload     TEXT,
-    created_at  INTEGER NOT NULL
-  );
+const SCHEMA = {
+  activity_events: `
+    CREATE TABLE IF NOT EXISTS activity_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type  TEXT    NOT NULL,
+      app_source  TEXT    NOT NULL DEFAULT 'gravity-claw',
+      project_id  TEXT,
+      payload     TEXT,
+      created_at  INTEGER NOT NULL
+    );
+  `,
+  agent_executions: `
+    CREATE TABLE IF NOT EXISTS agent_executions (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_name      TEXT    NOT NULL DEFAULT 'gravity-claw',
+      task_type       TEXT    NOT NULL,
+      success         INTEGER NOT NULL DEFAULT 1,
+      execution_time  INTEGER NOT NULL DEFAULT 0,
+      error_details   TEXT,
+      created_at      INTEGER NOT NULL
+    );
+  `,
+  memory_vectors: `
+    CREATE TABLE IF NOT EXISTS memory_vectors (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id     TEXT    NOT NULL,
+      category      TEXT    NOT NULL,
+      text          TEXT    NOT NULL,
+      metadata      TEXT,
+      embedding     TEXT,
+      created_at    INTEGER NOT NULL
+    );
+  `,
+};
 
-  CREATE TABLE IF NOT EXISTS agent_executions (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_name      TEXT    NOT NULL DEFAULT 'gravity-claw',
-    task_type       TEXT    NOT NULL,
-    success         INTEGER NOT NULL DEFAULT 1,
-    execution_time  INTEGER NOT NULL DEFAULT 0,
-    error_details   TEXT,
-    created_at      INTEGER NOT NULL
-  );
+function ensureColumns(tableName: string, requiredColumns: Array<{ name: string; alterSql: string }>): void {
+  if (!db) return;
 
-  CREATE INDEX IF NOT EXISTS idx_gc_activity_created  ON activity_events(created_at);
-  CREATE INDEX IF NOT EXISTS idx_gc_executions_created ON agent_executions(created_at);
-`;
+  try {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+    const names = new Set(columns.map((column) => column.name));
+
+    for (const { name, alterSql } of requiredColumns) {
+      if (!names.has(name)) {
+        db.exec(alterSql);
+      }
+    }
+  } catch { /* best effort migration */ }
+}
+
+function ensureIndex(tableName: string, columnName: string, indexName: string): void {
+  if (!db) return;
+
+  try {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+    const hasColumn = columns.some((column) => column.name === columnName);
+    if (!hasColumn) return;
+
+    const quotedIndex = `idx_${tableName}_${columnName}`;
+    const safeIndex = indexName || quotedIndex;
+    db.exec(`CREATE INDEX IF NOT EXISTS ${safeIndex} ON ${tableName}(${columnName})`);
+  } catch { /* best effort migration */ }
+}
+
+function ensureActivityColumns(): void {
+  ensureColumns('activity_events', [
+    { name: 'event_type', alterSql: 'ALTER TABLE activity_events ADD COLUMN event_type TEXT NOT NULL DEFAULT "generic"' },
+    { name: 'app_source', alterSql: "ALTER TABLE activity_events ADD COLUMN app_source TEXT NOT NULL DEFAULT 'gravity-claw'" },
+    { name: 'project_id', alterSql: 'ALTER TABLE activity_events ADD COLUMN project_id TEXT' },
+    { name: 'payload', alterSql: 'ALTER TABLE activity_events ADD COLUMN payload TEXT' },
+    { name: 'created_at', alterSql: 'ALTER TABLE activity_events ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0' },
+  ]);
+}
+
+function ensureExecutionColumns(): void {
+  ensureColumns('agent_executions', [
+    { name: 'agent_name', alterSql: "ALTER TABLE agent_executions ADD COLUMN agent_name TEXT NOT NULL DEFAULT 'gravity-claw'" },
+    { name: 'task_type', alterSql: 'ALTER TABLE agent_executions ADD COLUMN task_type TEXT NOT NULL DEFAULT "generic"' },
+    { name: 'success', alterSql: 'ALTER TABLE agent_executions ADD COLUMN success INTEGER NOT NULL DEFAULT 1' },
+    { name: 'execution_time', alterSql: 'ALTER TABLE agent_executions ADD COLUMN execution_time INTEGER NOT NULL DEFAULT 0' },
+    { name: 'error_details', alterSql: 'ALTER TABLE agent_executions ADD COLUMN error_details TEXT' },
+    { name: 'created_at', alterSql: 'ALTER TABLE agent_executions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0' },
+  ]);
+}
+
+function ensureMemoryVectorColumns(): void {
+  ensureColumns('memory_vectors', [
+    { name: 'source_id', alterSql: 'ALTER TABLE memory_vectors ADD COLUMN source_id TEXT NOT NULL DEFAULT "gravity-claw"' },
+    { name: 'category', alterSql: 'ALTER TABLE memory_vectors ADD COLUMN category TEXT NOT NULL DEFAULT "semantic"' },
+    { name: 'text', alterSql: 'ALTER TABLE memory_vectors ADD COLUMN text TEXT NOT NULL DEFAULT ""' },
+    { name: 'metadata', alterSql: 'ALTER TABLE memory_vectors ADD COLUMN metadata TEXT' },
+    { name: 'embedding', alterSql: 'ALTER TABLE memory_vectors ADD COLUMN embedding TEXT' },
+    { name: 'created_at', alterSql: 'ALTER TABLE memory_vectors ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0' },
+  ]);
+}
+
+function ensureMemoryVectorIndexes(): void {
+  ensureIndex('memory_vectors', 'source_id', 'idx_memory_vectors_source');
+  ensureIndex('memory_vectors', 'category', 'idx_memory_vectors_category');
+  ensureIndex('memory_vectors', 'created_at', 'idx_memory_vectors_created');
+  ensureIndex('activity_events', 'created_at', 'idx_gc_activity_created');
+  ensureIndex('agent_executions', 'created_at', 'idx_gc_executions_created');
+}
 
 export function initDb(): void {
   try {
@@ -48,7 +128,15 @@ export function initDb(): void {
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
-    db.exec(SCHEMA);
+    db.exec('BEGIN IMMEDIATE');
+    db.exec(SCHEMA.activity_events);
+    db.exec(SCHEMA.agent_executions);
+    db.exec(SCHEMA.memory_vectors);
+    db.exec('COMMIT');
+    ensureActivityColumns();
+    ensureExecutionColumns();
+    ensureMemoryVectorColumns();
+    ensureMemoryVectorIndexes();
 
     console.log(`  [db] activity recording: ${DB_PATH}`);
     console.log(`  [db] log dir: ${LOG_DIR}`);
@@ -56,6 +144,14 @@ export function initDb(): void {
     console.warn('[db] init failed — recording disabled:', err instanceof Error ? err.message : err);
     db = null;
   }
+}
+
+export function getDb(): Database.Database | null {
+  return db;
+}
+
+export function vectorStorageAvailable(): boolean {
+  return db !== null;
 }
 
 export function recordActivity(entry: AgentActivityRecord): void {

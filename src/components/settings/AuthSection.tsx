@@ -22,9 +22,9 @@ export default function AuthSection({
 }: AuthSectionProps) {
   const sessionStatus =
     geminiKey && kimiKey ? 'Gemini + Kimi keys loaded'
-    : geminiKey ? 'Gemini API key loaded'
-    : kimiKey ? 'Kimi API key loaded'
-    : 'No API keys configured';
+      : geminiKey ? 'Gemini API key loaded'
+        : kimiKey ? 'Kimi API key loaded'
+          : 'No API keys configured';
 
   return (
     <section className="settings-section card">
@@ -56,8 +56,8 @@ export default function AuthSection({
         />
 
         <ApiKeyField
-          label="Kimi K2.5 API Key"
-          hint={`${kimiKey ? 'Moonshot Kimi key loaded' : 'Optional — enables Kimi K2.5 models.'} Get a key at <a href="https://platform.moonshot.ai" target="_blank" rel="noreferrer" style="color:var(--text-amber)">platform.moonshot.ai</a>`}
+          label="Kimi API Key"
+          hint={`${kimiKey ? 'Moonshot Kimi key loaded' : 'Optional — enables Moonshot Kimi models.'} Get a key at <a href="https://platform.moonshot.ai" target="_blank" rel="noreferrer" style="color:var(--text-amber)">platform.moonshot.ai</a>`}
           value={kimiApiKey}
           onChange={setKimiApiKey}
           onSave={onSaveKimiKey}

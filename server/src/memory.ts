@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { callLocalMemoryTool } from './memory/local-vector.js';
 
 export const MEMORY_HTTP_URL = process.env.MEMORY_HTTP_URL?.trim() || 'http://localhost:3200';
 
@@ -19,7 +20,7 @@ export function scrubPII(text: string): string {
   return scrubbed;
 }
 
-export async function callMemoryTool(
+async function callRemoteMemoryTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string | null> {
@@ -46,6 +47,22 @@ export async function callMemoryTool(
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Memory service unreachable: ${message}`);
   }
+}
+
+export async function callMemoryTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<string | null> {
+  if (state.appConfig.vectorMemoryEnabled) {
+    const local = await callLocalMemoryTool(name, args);
+    if (local !== null) {
+      return local;
+    }
+    if (name.startsWith('memory_')) {
+      return null;
+    }
+  }
+  return callRemoteMemoryTool(name, args);
 }
 
 export async function refreshMemoryContext(): Promise<void> {
