@@ -25,7 +25,7 @@ export default function ApiKeyField({
     <div className="settings-row">
       <div className="settings-row-label">
         <div className="settings-label">{label}</div>
-        <div className="settings-hint" dangerouslySetInnerHTML={{ __html: hint }} />
+        <div className="settings-hint">{hint}</div>
       </div>
       <div className="key-field-wrap">
         <div className="key-field-row">

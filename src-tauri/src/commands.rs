@@ -13,7 +13,9 @@ const STORE_PATH: &str = "gravity-claw-state.json";
 const MAX_KEY_LENGTH: usize = 8 * 1024; // 8KB
 const MAX_VALUE_LENGTH: usize = 1024 * 1024; // 1MB
 
-fn get_store(app: &AppHandle) -> Result<std::sync::Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
+fn get_store(
+    app: &AppHandle,
+) -> Result<std::sync::Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
     app.store(STORE_PATH)
         .map_err(|e| format!("Failed to open store: {}", e))
 }
@@ -98,21 +100,17 @@ pub async fn storage_get_item(app: AppHandle, key: String) -> Result<Option<Stri
     validate_storage_key(&key)?;
     let store = get_store(&app)?;
     Ok(store
-        .get(&format!("storage.{}", key))
+        .get(format!("storage.{}", key))
         .and_then(|v| v.as_str().map(|s| s.to_string())))
 }
 
 /// Stores a generic key-value pair.
 #[command]
-pub async fn storage_set_item(
-    app: AppHandle,
-    key: String,
-    value: String,
-) -> Result<(), String> {
+pub async fn storage_set_item(app: AppHandle, key: String, value: String) -> Result<(), String> {
     validate_storage_key(&key)?;
     validate_storage_value(&value)?;
     let store = get_store(&app)?;
-    store.set(&format!("storage.{}", key), Value::String(value));
+    store.set(format!("storage.{}", key), Value::String(value));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -122,7 +120,7 @@ pub async fn storage_set_item(
 pub async fn storage_remove_item(app: AppHandle, key: String) -> Result<(), String> {
     validate_storage_key(&key)?;
     let store = get_store(&app)?;
-    store.delete(&format!("storage.{}", key));
+    store.delete(format!("storage.{}", key));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }

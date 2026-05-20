@@ -135,10 +135,7 @@ async fn read_port_file(app_root: &std::path::Path) -> Option<u16> {
 
 /// Attempts a TCP connection to localhost:port.
 async fn is_port_reachable(port: u16) -> bool {
-    match tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    (tokio::net::TcpStream::connect(("127.0.0.1", port)).await).is_ok()
 }
 
 /// Confirms the backend is ready by checking TCP reachability followed by
@@ -322,22 +319,19 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
         }
 
         // Check if process exited early.
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let details = if let Some(code) = status.code() {
-                    format!("exit code {}", code)
-                } else {
-                    "killed by signal".to_string()
-                };
-                let mut err = format!("Backend exited before startup completed ({}).", details);
-                let output = output_buf.lock().await;
-                if !output.is_empty() {
-                    err.push_str("\n\nBackend output:\n");
-                    err.push_str(&output);
-                }
-                return Err(err);
+        if let Ok(Some(status)) = child.try_wait() {
+            let details = if let Some(code) = status.code() {
+                format!("exit code {}", code)
+            } else {
+                "killed by signal".to_string()
+            };
+            let mut err = format!("Backend exited before startup completed ({}).", details);
+            let output = output_buf.lock().await;
+            if !output.is_empty() {
+                err.push_str("\n\nBackend output:\n");
+                err.push_str(&output);
             }
-            _ => {}
+            return Err(err);
         }
 
         if start.elapsed().as_millis() as u64 >= BACKEND_START_TIMEOUT_MS {
@@ -390,8 +384,7 @@ pub fn run() {
                         if let Ok(Some(update)) = updater.check().await {
                             eprintln!(
                                 "[Gravity-Claw] Update available: {} -> {}",
-                                update.current_version,
-                                update.version
+                                update.current_version, update.version
                             );
                         }
                     }

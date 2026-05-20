@@ -4,6 +4,7 @@ version = "0.2.0"
 description = "AI agent orchestrator desktop application"
 authors = ["Bruce Freshwater"]
 edition = "2021"
+rust-version = "1.70"
 
 [lib]
 name = "gravity_claw_lib"
@@ -35,3 +36,14 @@ lto = true
 opt-level = "s" # Optimized for size; benchmark against "3" if CPU-bound
 strip = true
 panic = "unwind"
+
+# All dependency crates: opt-level=0 + 256 codegen-units + sequential LLVM threads.
+# Rationale (rust-lang/rust#70035, Tauri issue #13638):
+#  - opt-level=0 -> ~40% less peak LLVM memory per crate vs opt-level=1
+#  - codegen-units=256 -> each unit is 1/256 of total IR
+#  - jobs=1 (in .cargo/config.toml) -> LLVM processes those 256 units one at a time
+#  - incremental=false -> no incremental cache memory overhead
+[profile.release.package."*"]
+opt-level = 0
+codegen-units = 256
+incremental = false
