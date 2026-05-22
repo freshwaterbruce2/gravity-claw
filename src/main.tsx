@@ -1,18 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './lib/tauriBridge'; // Initializes Tauri desktop API bridge
-import { checkForUpdate } from './lib/updater';
+import { tauriBridgeReady } from './lib/tauriBridge';
 import App from './App';
 import './styles/global.css';
 
-// Check for app updates on startup (desktop builds only).
-void checkForUpdate();
+async function bootstrap(): Promise<void> {
+  await tauriBridgeReady;
 
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  }
 }
+
+void bootstrap();

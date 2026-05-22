@@ -21,6 +21,8 @@ interface GravityClawDesktopStorageBridge {
 interface GravityClawDesktopRuntimeInfo {
   apiBase: string;
   isDesktop: boolean;
+  backendStatus?: 'ready' | 'fallback' | 'failed';
+  backendError?: string;
 }
 
 interface GravityClawDesktopApi {

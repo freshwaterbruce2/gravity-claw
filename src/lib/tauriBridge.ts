@@ -6,28 +6,128 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
-async function initTauriBridge(): Promise<void> {
+export interface TauriWindow extends Window {
+  __TAURI__?: unknown;
+  __TAURI_INTERNALS__?: unknown;
+  __TAURI_OS__?: {
+    platform?: string;
+  };
+}
+
+interface TauriBridgeEnv {
+  VITE_GRAVITY_CLAW_PORT?: string;
+}
+
+type RuntimeBackendStatus = 'Starting' | { Ready: number } | { Failed: string };
+type RuntimeBridgeStatus = 'ready' | 'fallback' | 'failed';
+
+interface RuntimeBridgeInfo {
+  apiBase: string;
+  backendStatus: RuntimeBridgeStatus;
+  backendError?: string;
+}
+
+const BACKEND_STATUS_TIMEOUT_MS = 35_000;
+const BACKEND_STATUS_POLL_MS = 250;
+
+export function getTauriWindow(): TauriWindow | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return window as TauriWindow;
+}
+
+export function isTauriRuntime(tauriWindow: TauriWindow): boolean {
+  return Boolean(tauriWindow.__TAURI__ || tauriWindow.__TAURI_INTERNALS__);
+}
+
+function fallbackApiBase(): string {
+  const env = import.meta.env as TauriBridgeEnv;
+  const envPort = env.VITE_GRAVITY_CLAW_PORT ?? '5187';
+  return `http://127.0.0.1:${envPort}`;
+}
+
+function readyPortFromStatus(status: RuntimeBackendStatus): number | null {
+  if (typeof status !== 'object' || status === null || !('Ready' in status)) {
+    return null;
+  }
+
+  return typeof status.Ready === 'number' ? status.Ready : null;
+}
+
+function failedReasonFromStatus(status: RuntimeBackendStatus): string | null {
+  if (typeof status !== 'object' || status === null || !('Failed' in status)) {
+    return null;
+  }
+
+  return typeof status.Failed === 'string' ? status.Failed : null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function resolveRuntimeInfo(): Promise<RuntimeBridgeInfo> {
+  try {
+    return {
+      apiBase: await invoke<string>('runtime_api_base'),
+      backendStatus: 'ready',
+    };
+  } catch {
+    // The backend often starts after the WebView. Poll Rust state so reused
+    // non-default ports from `.server-port` do not get frozen to 5187.
+  }
+
+  const deadline = Date.now() + BACKEND_STATUS_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const status = await invoke<RuntimeBackendStatus>('runtime_backend_status');
+      const readyPort = readyPortFromStatus(status);
+      if (readyPort !== null) {
+        return {
+          apiBase: `http://127.0.0.1:${readyPort}`,
+          backendStatus: 'ready',
+        };
+      }
+
+      const failedReason = failedReasonFromStatus(status);
+      if (failedReason) {
+        return {
+          apiBase: '',
+          backendStatus: 'failed',
+          backendError: failedReason,
+        };
+      }
+    } catch {
+      // Keep polling; command registration may briefly race WebView startup.
+    }
+
+    await sleep(BACKEND_STATUS_POLL_MS);
+  }
+
+  return {
+    apiBase: fallbackApiBase(),
+    backendStatus: 'fallback',
+  };
+}
+
+export async function initializeTauriBridge(): Promise<void> {
+  const tauriWindow = getTauriWindow();
+
   // Only initialize when running inside Tauri (not in a browser).
-  if (typeof window === 'undefined' || !(window as any).__TAURI__) {
+  if (!tauriWindow || !isTauriRuntime(tauriWindow)) {
     return;
   }
 
   // If the legacy bridge is already present, don't overwrite it.
-  if ((window as any).gravityClawDesktop) {
+  if (tauriWindow.gravityClawDesktop) {
     return;
   }
 
-  // Fetch the backend API base from Rust state.
-  let apiBase = '';
-  try {
-    apiBase = await invoke<string>('runtime_api_base');
-  } catch {
-    // Fallback — the backend may not have started yet.
-    const envPort = (import.meta.env as any).VITE_GRAVITY_CLAW_PORT ?? '5187';
-    apiBase = `http://127.0.0.1:${envPort}`;
-  }
+  const runtime = await resolveRuntimeInfo();
 
-  (window as any).gravityClawDesktop = {
+  tauriWindow.gravityClawDesktop = {
     auth: {
       getSession: () =>
         invoke<{ gemini_key: string | null; kimi_key: string | null }>('auth_get_session').then(
@@ -36,18 +136,21 @@ async function initTauriBridge(): Promise<void> {
       setGeminiKey: (apiKey: string) => invoke('auth_set_gemini_key', { apiKey }),
       setKimiKey: (apiKey: string) => invoke('auth_set_kimi_key', { apiKey }),
       clearSession: () => invoke('auth_clear_session'),
-    },    storage: {
+    },
+    storage: {
       getItem: (key: string) => invoke<string | null>('storage_get_item', { key }),
       setItem: (key: string, value: string) => invoke('storage_set_item', { key, value }),
       removeItem: (key: string) => invoke('storage_remove_item', { key }),
     },
     runtime: {
-      apiBase,
+      apiBase: runtime.apiBase,
       isDesktop: true,
+      backendStatus: runtime.backendStatus,
+      backendError: runtime.backendError,
     },
-    platform: (window as any).__TAURI_OS__?.platform ?? 'win32',
+    platform: tauriWindow.__TAURI_OS__?.platform ?? 'win32',
   };
 }
 
 // Auto-init on import.
-void initTauriBridge();
+export const tauriBridgeReady = initializeTauriBridge();
