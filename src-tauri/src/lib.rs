@@ -42,6 +42,23 @@ const DEFAULT_BACKEND_PORT: u16 = 5187;
 const BACKEND_START_TIMEOUT_MS: u64 = 30_000;
 /// Poll interval when waiting for backend port (ms).
 const BACKEND_POLL_INTERVAL_MS: u64 = 300;
+const DEFAULT_NODE_OPTIONS: &str = "--max-old-space-size=4096 --max-semi-space-size=128";
+
+fn backend_node_options() -> String {
+    match std::env::var("NODE_OPTIONS") {
+        Ok(existing) if !existing.trim().is_empty() => {
+            let mut options = existing;
+            if !options.contains("--max-old-space-size") {
+                options.push_str(" --max-old-space-size=4096");
+            }
+            if !options.contains("--max-semi-space-size") {
+                options.push_str(" --max-semi-space-size=128");
+            }
+            options
+        }
+        _ => DEFAULT_NODE_OPTIONS.to_string(),
+    }
+}
 
 /// Converts a path to a String, logging a warning if the conversion is lossy.
 fn path_to_string(path: &std::path::Path) -> String {
@@ -244,6 +261,7 @@ async fn ensure_backend_server(app_root: &std::path::Path) -> Result<(Option<Chi
     let mut child = Command::new(&node_exe)
         .args(&spawn_args)
         .current_dir(app_root)
+        .env("NODE_OPTIONS", backend_node_options())
         .env("GRAVITY_CLAW_PORT", DEFAULT_BACKEND_PORT.to_string())
         .env(
             "GRAVITY_CLAW_CONFIG_PATH",

@@ -79,7 +79,7 @@ test('scrubPII leaves clean text unchanged', () => {
 
 test('local vector tools can persist and retrieve semantic context', async () => {
   const sourceId = 'test-vector-memory-context';
-  const db = withLocalDb();
+  withLocalDb();
   cleanupSource(sourceId);
 
   await callLocalMemoryTool('memory_set_context', { sourceId, project: sourceId, status: 'online' });

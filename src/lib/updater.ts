@@ -5,6 +5,7 @@
 
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { getTauriWindow, isTauriRuntime } from './tauriBridge';
 
 export interface UpdateInfo {
   version: string;
@@ -21,7 +22,8 @@ let pendingUpdate: Awaited<ReturnType<typeof check>> | null = null;
 export async function checkForUpdate(): Promise<UpdateInfo | null> {
   try {
     // Only run inside Tauri desktop builds
-    if (typeof window === 'undefined' || !(window as any).__TAURI__) {
+    const tauriWindow = getTauriWindow();
+    if (!tauriWindow || !isTauriRuntime(tauriWindow)) {
       return null;
     }
 
