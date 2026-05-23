@@ -18,6 +18,12 @@ const PAGE_KEYS: Record<string, Page> = {
 export function useKeyboardShortcuts({ onOpenPalette, onNavigate }: ShortcutOptions) {
   useEffect(() => {
     function handler(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+
+      // Don't capture when a modal/dialog is open
+      const modalOpen = document.querySelector('[role="dialog"], [aria-modal="true"]') !== null;
+      if (modalOpen) return;
+
       // Don't capture when typing in inputs
       const tag = (e.target as HTMLElement).tagName;
       const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;

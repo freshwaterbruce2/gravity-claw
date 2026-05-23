@@ -35,7 +35,7 @@ function RingGauge({ pct, label }: { pct: number; label: string }) {
           strokeWidth={6}
         />
         <circle
-          className="ring-fill"
+          className="ring-fill ring-fill-animated"
           cx={44}
           cy={44}
           r={RADIUS}
@@ -46,7 +46,6 @@ function RingGauge({ pct, label }: { pct: number; label: string }) {
           strokeDasharray={dashArray}
           strokeDashoffset={0}
           transform="rotate(-90 44 44)"
-          style={{ transition: 'stroke-dasharray 0.8s ease-out' }}
         />
         <text
           className="ring-text"
@@ -150,7 +149,7 @@ export default function HeroVitalsWidget() {
     <div className="hero-vitals">
       {/* ── Left: Gauges + Sparklines ── */}
       <div className="hero-gauges">
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+        <div className="hero-gauge-row">
           <RingGauge pct={cpu} label="CPU" />
           <RingGauge pct={memPct} label="MEM" />
         </div>

@@ -1,8 +1,26 @@
 import { state } from './state.js';
+import { callLocalMemoryTool } from './memory/local-vector.js';
 
-export const MEMORY_HTTP_URL = 'http://localhost:3200';
+export const MEMORY_HTTP_URL = process.env.MEMORY_HTTP_URL?.trim() || 'http://localhost:3200';
 
-export async function callMemoryTool(
+export function scrubPII(text: string): string {
+  const patterns = [
+    { regex: /https?:\/\/[^\s:]+:[^\s@]+@[^\s]+/g, name: 'url-with-creds' },
+    { regex: /sk-[a-zA-Z0-9]{20,}/g, name: 'api-key' },
+    { regex: /[a-fA-F0-9]{32,64}/g, name: 'hex-key' },
+    { regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, name: 'email' },
+    { regex: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, name: 'phone' },
+    { regex: /\b(?:\d[ -]*?){13,16}\b/g, name: 'credit-card' },
+  ];
+
+  let scrubbed = text;
+  for (const { regex } of patterns) {
+    scrubbed = scrubbed.replace(regex, '[REDACTED]');
+  }
+  return scrubbed;
+}
+
+async function callRemoteMemoryTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string | null> {
@@ -12,20 +30,39 @@ export async function callMemoryTool(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: Date.now(),
+        id: crypto.randomUUID(),
         method: 'tools/call',
         params: { name, arguments: args },
       }),
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      throw new Error(`Memory service returned ${res.status}: ${res.statusText}`);
+    }
     const data = await res.json() as {
       result?: { content?: { type: string; text: string }[] };
     };
     return data.result?.content?.[0]?.text ?? null;
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Memory service unreachable: ${message}`);
   }
+}
+
+export async function callMemoryTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<string | null> {
+  if (state.appConfig.vectorMemoryEnabled) {
+    const local = await callLocalMemoryTool(name, args);
+    if (local !== null) {
+      return local;
+    }
+    if (name.startsWith('memory_')) {
+      return null;
+    }
+  }
+  return callRemoteMemoryTool(name, args);
 }
 
 export async function refreshMemoryContext(): Promise<void> {
@@ -52,15 +89,18 @@ export async function refreshMemoryContext(): Promise<void> {
 export async function captureExchange(userText: string, agentReply: string): Promise<void> {
   if (!state.appConfig.memoryEnabled || !state.appConfig.beeMemoryEnabled) return;
 
+  const safeUserText = scrubPII(userText);
+  const safeAgentReply = scrubPII(agentReply);
+
   callMemoryTool('memory_add_episodic', {
-    query: userText.slice(0, 500),
-    response: agentReply.slice(0, 500),
+    query: safeUserText.slice(0, 500),
+    response: safeAgentReply.slice(0, 500),
     sourceId: 'gravity-claw',
   }).catch((err) => { console.warn('[memory] failed to capture episodic exchange:', err); });
 
   if (state.appConfig.vectorMemoryEnabled) {
     callMemoryTool('memory_add_semantic', {
-      text: `User: ${userText.slice(0, 500)}\nAgent: ${agentReply.slice(0, 500)}`,
+      text: `User: ${safeUserText.slice(0, 500)}\nAgent: ${safeAgentReply.slice(0, 500)}`,
       category: 'chat-exchange',
     }).catch((err) => { console.warn('[memory] failed to capture semantic exchange:', err); });
   }

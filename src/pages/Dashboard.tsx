@@ -107,7 +107,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       <section className="bento-workqueue bento-card bento-card--primary">
         <div className="section-header">
           <span className="section-title">WORK QUEUE</span>
-          <button className="btn btn-ghost" style={{ height: 26, fontSize: 11 }} onClick={() => onNavigate('tasks')}>
+          <button className="btn btn-ghost section-header-btn" onClick={() => onNavigate('tasks')}>
             Open board
           </button>
         </div>
@@ -201,7 +201,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="ops-activity-panel">
             <div className="section-header">
               <span className="section-title">LIVE ACTIVITY</span>
-              <button className="btn btn-ghost" style={{ height: 26, fontSize: 11 }} onClick={() => onNavigate('chat')}>
+              <button className="btn btn-ghost section-header-btn" onClick={() => onNavigate('chat')}>
                 Open chat
               </button>
             </div>

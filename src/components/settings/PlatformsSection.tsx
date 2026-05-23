@@ -16,6 +16,10 @@ interface PlatformsSectionProps {
 }
 
 export default function PlatformsSection({ platforms, setPlatforms }: PlatformsSectionProps) {
+  const createOnChange = (platformId: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlatforms((prev) => ({ ...prev, [platformId]: e.target.checked }));
+  };
+
   return (
     <section className="settings-section card">
       <div className="section-header">
@@ -31,13 +35,11 @@ export default function PlatformsSection({ platforms, setPlatforms }: PlatformsS
               <span className={`badge ${enabled ? 'badge-green' : 'badge-muted'}`}>
                 {enabled ? 'Connected' : 'Off'}
               </span>
-              <label className="toggle" style={{ marginTop: 'auto' }}>
+              <label className="toggle platform-toggle">
                 <input
                   type="checkbox"
                   checked={enabled}
-                  onChange={(e) =>
-                    setPlatforms((prev) => ({ ...prev, [platform.id]: e.target.checked }))
-                  }
+                  onChange={createOnChange(platform.id)}
                 />
                 <span className="toggle-track">
                   <span className="toggle-thumb" />

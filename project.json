@@ -39,9 +39,6 @@
     },
     "start:full": {
       "executor": "nx:run-commands",
-      "dependsOn": [
-        "build"
-      ],
       "options": {
         "command": "pnpm run start:full",
         "cwd": "apps/gravity-claw"
@@ -54,7 +51,7 @@
         "build"
       ],
       "options": {
-        "command": "pnpm run desktop",
+        "command": "pnpm run tauri:build",
         "cwd": "apps/gravity-claw"
       },
       "cache": false
@@ -62,13 +59,16 @@
     "desktop:dev": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pnpm run desktop:dev",
+        "command": "pnpm run tauri:dev",
         "cwd": "apps/gravity-claw"
       },
       "cache": false
     },
     "build": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build"
+      ],
       "outputs": [
         "{projectRoot}/dist"
       ],
@@ -121,7 +121,6 @@
       },
       "cache": false
     },
-    "quality": {}
   },
   "tags": [
     "scope:gravity",

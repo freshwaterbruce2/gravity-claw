@@ -13,15 +13,19 @@ export function rebuildMcpToolRegistry() {
     return;
   }
 
-  state.geminiFunctionTool = { functionDeclarations: declarations };
-  state.availableMcpToolsMap = {};
+  // Build local snapshot first, then atomically assign to global state
+  const nextGeminiFunctionTool = { functionDeclarations: declarations };
+  const nextMcpToolsMap: Record<string, { server: string; tool: string }> = {};
 
   for (const serverTool of visibleServerTools) {
     for (const tool of serverTool.tools) {
       const safeName = `${serverTool.server}_${tool.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
-      state.availableMcpToolsMap[safeName] = { server: serverTool.server, tool: tool.name };
+      nextMcpToolsMap[safeName] = { server: serverTool.server, tool: tool.name };
     }
   }
+
+  state.geminiFunctionTool = nextGeminiFunctionTool;
+  state.availableMcpToolsMap = nextMcpToolsMap;
 }
 
 export async function refreshMcpTools(retries = 0): Promise<void> {

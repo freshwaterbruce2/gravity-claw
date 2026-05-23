@@ -11,14 +11,14 @@ export type GeminiFunctionTool = {
 };
 
 export interface LogEntryRecord {
-  level: string;
+  level: 'debug' | 'info' | 'warn' | 'error' | 'skill';
   message: string;
   source: string;
   ts: number;
 }
 
 export interface AgentActivityRecord {
-  type: string;
+  type: 'task' | 'skill' | 'error' | 'message' | 'system' | 'tool_call';
   tool: string;
   server?: string;
   durationMs: number;

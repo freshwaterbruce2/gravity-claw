@@ -41,8 +41,8 @@ export default function Tasks() {
     <div className="tasks-page animate-in">
       <div className="tasks-header">
         <div>
-          <h3 style={{ color: 'var(--text-primary)', marginBottom: 4 }}>Task Board</h3>
-          <p className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
+          <h3>Task Board</h3>
+          <p className="text-muted">
             {tasks.filter((t) => t.status === 'running').length} running ·{' '}
             {tasks.filter((t) => t.status === 'done').length} completed
           </p>
@@ -131,11 +131,11 @@ function TaskCard({
       </div>
       {task.status === 'running' && (
         <div className="task-progress">
-          <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
-            <span className="text-muted" style={{ fontSize: 10 }}>
+          <div className="flex justify-between items-center task-progress-header">
+            <span className="text-muted task-progress-label">
               Progress
             </span>
-            <span className="font-code text-amber" style={{ fontSize: 10 }}>
+            <span className="font-code text-amber task-progress-value">
               {task.progress}%
             </span>
           </div>

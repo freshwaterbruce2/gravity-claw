@@ -13,6 +13,9 @@ const TOGGLES = [
 
 type ToggleKey = (typeof TOGGLES)[number]['key'];
 
+const isToggleKey = (key: string): key is ToggleKey =>
+  TOGGLES.some((t) => t.key === key);
+
 export default function FeatureTogglesWidget() {
   const store = useAgentStore();
 
@@ -23,7 +26,7 @@ export default function FeatureTogglesWidget() {
       </div>
       <div className="toggle-grid">
         {TOGGLES.map(({ key, label, icon }) => {
-          const enabled = Boolean(store[key as ToggleKey]);
+          const enabled = isToggleKey(key) ? Boolean(store[key]) : false;
           return (
             <div key={key} className="toggle-tile">
               <span className="toggle-icon">{icon}</span>

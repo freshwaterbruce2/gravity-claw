@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { checkForUpdate, installUpdate, type UpdateInfo } from './lib/updater';
 import './App.css';
 import LoginScreen from './components/auth/LoginScreen';
 import CommandPalette from './components/CommandPalette';
@@ -23,6 +24,8 @@ export default function App() {
   const { initializeAuth, isAuthenticated, isHydrated } = useAuthStore();
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updating, setUpdating] = useState(false);
   const { tick, initializeConfig } = useAgentStore();
   const { initializeChat } = useChatStore();
 
@@ -37,6 +40,12 @@ export default function App() {
     void initializeAuth();
     void initializeConfig();
     void initializeChat();
+
+    // Check for updates after auth/config init
+    void (async () => {
+      const info = await checkForUpdate();
+      if (info) setUpdate(info);
+    })();
   }, [initializeAuth, initializeChat, initializeConfig]);
 
   // Uptime ticker (local display counter — real uptime comes from system.metrics SSE)
@@ -84,6 +93,26 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {update && (
+        <div className="update-banner">
+          <span className="update-banner-text">
+            Update available: <strong>{update.version}</strong>
+          </span>
+          <button
+            className="update-banner-btn"
+            onClick={() => {
+              setUpdating(true);
+              void installUpdate();
+            }}
+            disabled={updating}
+          >
+            {updating ? 'Downloading...' : 'Install & Restart'}
+          </button>
+          <button className="update-banner-dismiss" onClick={() => setUpdate(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
       <div className="app-main">
         <TopBar currentPage={currentPage} />

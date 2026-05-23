@@ -6,6 +6,28 @@
   overflow: hidden;
 }
 
+.chat-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: rgba(245,158,11,0.12);
+  border-bottom: 1px solid rgba(245,158,11,0.25);
+  font-size: var(--text-sm);
+  color: var(--amber-bright);
+}
+
+.chat-banner-dismiss {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 /* ── Messages ── */
 .chat-messages {
   flex: 1;
@@ -168,7 +190,7 @@
 }
 
 /* ── Command Palette (in-chat) ── */
-.command-palette {
+.chat-command-palette {
   position: absolute;
   bottom: 80px;
   left: var(--sp-6);
@@ -181,7 +203,7 @@
   box-shadow: 0 24px 64px rgba(0,0,0,0.6);
 }
 
-.command-palette-header {
+.chat-command-palette-header {
   padding: var(--sp-2) var(--sp-4);
   border-bottom: 1px solid var(--border);
 }

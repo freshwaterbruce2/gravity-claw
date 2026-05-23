@@ -75,9 +75,31 @@ function SettingsForm() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  const [availableModels, setAvailableModels] = useState<ModelOption[]>([
-    { id: model, label: model, provider: 'google' },
-  ]);
+  // Static model list so the dropdown works even when the server is unreachable.
+  // The /api/models endpoint can augment this in the future (e.g. for dynamic
+  // provider discovery), but the UI should never be blocked by a network call.
+  const STATIC_MODELS: ModelOption[] = [
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)', provider: 'google' },
+    { id: 'gemini-3.1-pro-preview-customtools', label: 'Gemini 3.1 Pro (Tool Use)', provider: 'google' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'google' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'google' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'google' },
+    { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', provider: 'google' },
+    { id: 'kimi-k2.6', label: 'Kimi K2.6 (latest)', provider: 'moonshot' },
+    { id: 'kimi-k2.6-turbo', label: 'Kimi K2.6 Turbo (fast)', provider: 'moonshot' },
+    { id: 'kimi-k2.5', label: 'Kimi K2.5 (256k, multimodal)', provider: 'moonshot' },
+    { id: 'kimi-k2-thinking', label: 'Kimi K2 Thinking (deep reasoning)', provider: 'moonshot' },
+    { id: 'kimi-k2-thinking-turbo', label: 'Kimi K2 Thinking Turbo (fast)', provider: 'moonshot' },
+    { id: 'kimi-k2-turbo-preview', label: 'Kimi K2 Turbo (60 tok/s)', provider: 'moonshot' },
+    { id: 'kimi-k2-0905-preview', label: 'Kimi K2 Sep 2025', provider: 'moonshot' },
+  ];
+
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>(() => {
+    const all = STATIC_MODELS.some((m) => m.id === model)
+      ? STATIC_MODELS
+      : [{ id: model, label: model, provider: 'google' }, ...STATIC_MODELS];
+    return all;
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -86,13 +108,18 @@ function SettingsForm() {
         const response = await fetch(buildApiUrl('/api/models'));
         if (!response.ok) return;
         const data = (await response.json()) as { models?: ModelOption[] };
-        const allModels = data.models ?? [];
-        if (!isMounted || allModels.length === 0) return;
-        const nextModels = allModels.some((e) => e.id === model)
-          ? allModels
-          : [{ id: model, label: model, provider: 'google' }, ...allModels];
+        const serverModels = data.models ?? [];
+        if (!isMounted || serverModels.length === 0) return;
+        // Merge server models with static list (server may have newer entries)
+        const merged = new Map<string, ModelOption>();
+        for (const m of STATIC_MODELS) merged.set(m.id, m);
+        for (const m of serverModels) merged.set(m.id, m);
+        const all = Array.from(merged.values());
+        const nextModels = all.some((e) => e.id === model)
+          ? all
+          : [{ id: model, label: model, provider: 'google' }, ...all];
         setAvailableModels(nextModels);
-      } catch { /* keep fallback */ }
+      } catch { /* static list already loaded */ }
     })();
     return () => { isMounted = false; };
   }, [model]);
@@ -200,9 +227,8 @@ function SettingsForm() {
             ✓ Configuration saved
           </div>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-save"
             onClick={handleSave}
-            style={{ height: 42, paddingInline: 'var(--sp-8)' }}
           >
             {saved ? '✓ SAVED' : 'SAVE CHANGES'}
           </button>

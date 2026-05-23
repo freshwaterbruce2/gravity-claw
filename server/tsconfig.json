@@ -11,6 +11,8 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    /* "noUncheckedIndexedAccess": true, // VibeTech standard — enable after fixing capability-policy.ts, history.ts, index.ts, tasks.ts, telegram.test.ts */
     "types": ["node"]
   },
   "include": ["src/**/*.ts"]

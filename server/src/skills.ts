@@ -29,6 +29,7 @@ export interface SkillsSnapshot {
 function humanize(value: string) {
   return value
     .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
     .trim();
 }

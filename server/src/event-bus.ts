@@ -1,5 +1,3 @@
-import { EventEmitter } from 'node:events';
-
 // ── Event Types ──────────────────────────────────────────────────────────────
 
 export type EventKind =
@@ -36,9 +34,6 @@ export interface EventBus {
 }
 
 export function createEventBus(): EventBus {
-  const emitter = new EventEmitter();
-  emitter.setMaxListeners(200); // allow many SSE clients
-
   const handlers = new Set<BusHandler>();
   const lastSnapshot = new Map<string, unknown>();
 

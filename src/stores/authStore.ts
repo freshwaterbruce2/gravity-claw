@@ -6,6 +6,7 @@ interface AuthState {
   kimiKey: string | null;
   isAuthenticated: boolean;
   isHydrated: boolean;
+  authError: string | null;
   initializeAuth: () => Promise<void>;
   loginWithGemini: (apiKey: string) => Promise<void>;
   loginWithKimi: (apiKey: string) => Promise<void>;
@@ -17,6 +18,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   kimiKey: null,
   isAuthenticated: false,
   isHydrated: false,
+  authError: null,
 
   initializeAuth: async () => {
     if (get().isHydrated) {
@@ -30,9 +32,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         kimiKey: session.kimiKey,
         isAuthenticated: Boolean(session.geminiKey || session.kimiKey),
         isHydrated: true,
+        authError: null,
       });
     } catch {
-      set({ geminiKey: null, kimiKey: null, isAuthenticated: false, isHydrated: true });
+      set({ geminiKey: null, kimiKey: null, isAuthenticated: false, isHydrated: true, authError: null });
     }
   },
 
@@ -40,26 +43,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const trimmedKey = apiKey.trim();
 
     if (!trimmedKey) {
+      set({ authError: 'API key is required' });
+      return;
+    }
+
+    if (!trimmedKey.startsWith('AIza') || trimmedKey.length < 35 || trimmedKey.length > 45) {
+      set({ authError: 'Invalid Gemini API key format' });
       return;
     }
 
     await setStoredGeminiKey(trimmedKey);
-    set({ geminiKey: trimmedKey, isAuthenticated: true, isHydrated: true });
+    set({ geminiKey: trimmedKey, isAuthenticated: true, isHydrated: true, authError: null });
   },
 
   loginWithKimi: async (apiKey: string) => {
     const trimmedKey = apiKey.trim();
 
     if (!trimmedKey) {
+      set({ authError: 'API key is required' });
+      return;
+    }
+
+    if (!trimmedKey.startsWith('sk-') || trimmedKey.length < 32) {
+      set({ authError: 'Invalid Kimi API key format' });
       return;
     }
 
     await setStoredKimiKey(trimmedKey);
-    set({ kimiKey: trimmedKey, isAuthenticated: true, isHydrated: true });
+    set({ kimiKey: trimmedKey, isAuthenticated: true, isHydrated: true, authError: null });
   },
 
   logout: async () => {
     await clearStoredAuthSession();
-    set({ geminiKey: null, kimiKey: null, isAuthenticated: false, isHydrated: true });
+    set({ geminiKey: null, kimiKey: null, isAuthenticated: false, isHydrated: true, authError: null });
   },
 }));

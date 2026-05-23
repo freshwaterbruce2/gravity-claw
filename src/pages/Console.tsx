@@ -48,8 +48,7 @@ export default function Console() {
             <span className="font-code text-xs text-muted">AUTO-SCROLL</span>
           </label>
           <button
-            className="btn btn-ghost"
-            style={{ height: 28, fontSize: 11 }}
+            className="btn btn-ghost btn-xs"
             onClick={clearLogs}
           >
             CLEAR

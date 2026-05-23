@@ -80,6 +80,7 @@ export async function handleKimiChat(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(reqBody),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {

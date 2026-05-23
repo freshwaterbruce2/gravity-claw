@@ -36,6 +36,15 @@ test('buildApiUrl returns relative api paths when no override is present', () =>
   assert.equal(buildSseUrl('/api/stream', { env: {} }), '/api/stream');
 });
 
+test('buildApiUrl returns absolute api paths when override is present', () => {
+  assert.equal(
+    buildApiUrl('/api/config', {
+      env: { VITE_GRAVITY_CLAW_API_BASE: 'http://localhost:5187' },
+    }),
+    'http://localhost:5187/api/config',
+  );
+});
+
 test('dev bypass requires both DEV mode and an explicit env flag', () => {
   assert.equal(
     isDevBypassEnabled({
@@ -62,6 +71,33 @@ test('dev bypass requires both DEV mode and an explicit env flag', () => {
       env: {
         DEV: false,
         VITE_ENABLE_DEV_BYPASS: 'true',
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    isDevBypassEnabled({
+      env: {},
+    }),
+    false,
+  );
+
+  assert.equal(
+    isDevBypassEnabled({
+      env: {
+        DEV: true,
+        VITE_ENABLE_DEV_BYPASS: '',
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    isDevBypassEnabled({
+      env: {
+        DEV: true,
+        VITE_ENABLE_DEV_BYPASS: 'yes',
       },
     }),
     false,

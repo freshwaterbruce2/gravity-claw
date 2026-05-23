@@ -135,8 +135,8 @@ export function normalizeTask(task: Partial<LiveTask> & { id?: string }): LiveTa
     status,
     progress: Number.isFinite(task.progress ?? NaN) ? Number(task.progress) : 0,
     createdAt: toDate(task.createdAt),
-    startedAt: task.startedAt ? toDate(task.startedAt) : null,
-    completedAt: task.completedAt ? toDate(task.completedAt) : null,
+    startedAt: task.startedAt != null ? toDate(task.startedAt) : null,
+    completedAt: task.completedAt != null ? toDate(task.completedAt) : null,
     description: task.description?.trim() || undefined,
   };
 }
@@ -276,7 +276,7 @@ export async function createTask(task: LiveTask): Promise<LiveTask | null> {
 
 export async function updateTaskOnServer(
   id: string,
-  patch: Partial<Pick<LiveTask, 'title' | 'skill' | 'priority' | 'status' | 'progress' | 'description'>>
+  patch: Partial<Pick<LiveTask, 'title' | 'skill' | 'priority' | 'status' | 'progress' | 'description' | 'startedAt' | 'completedAt'>>
 ): Promise<LiveTask | null> {
   try {
     const payload = await requestJson<unknown>('/api/tasks', {

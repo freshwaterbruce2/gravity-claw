@@ -75,7 +75,7 @@ async function persistMessages(messages: Message[]): Promise<void> {
   }
 }
 
-const DEFAULT_MODEL = 'gemini-flash-latest';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const MAX_MESSAGE_CHARS = 100_000;
 const TRUNCATED_SUFFIX = '\n\n[Truncated]';
 
@@ -142,7 +142,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return set({ messages: [WELCOME] });
   },
 
-  sendMessage: async (userText: string, apiKey: string, model = DEFAULT_MODEL, kimiApiKey?: string) => {
+  sendMessage: async (userText: string, apiKey: string, model = DEFAULT_MODEL, kimiApiKey?: string, abortSignal?: AbortSignal) => {
     const { addMessage, updateMessage, setTyping, messages } = get();
 
     // Add user message
@@ -173,6 +173,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, model, apiKey, kimiApiKey }),
+        signal: abortSignal,
       });
 
       if (!res.ok) {
@@ -196,11 +197,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       updateMessage(agentId, { content: accumulated || '(no response)', isTyping: false });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      updateMessage(agentId, {
-        content: `⚠️ **Error**: ${msg}\n\nCheck that the proxy server is running (\`pnpm server:dev\`) and your Gemini API key is valid.`,
-        isTyping: false,
-      });
+      if (abortSignal?.aborted) {
+        updateMessage(agentId, { content: '(aborted)', isTyping: false });
+      } else {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        updateMessage(agentId, {
+          content: `⚠️ **Error**: ${msg}\n\nCheck that the proxy server is running (\`pnpm server:dev\`) and your Gemini API key is valid.`,
+          isTyping: false,
+        });
+      }
     }
 
     setTyping(false);

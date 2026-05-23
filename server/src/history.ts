@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { callMemoryTool } from './memory.js';
 
-const MAX_HISTORY_CHARS = 3_200_000;
+const MAX_HISTORY_CHARS = 100_000;
 const MAX_SINGLE_MESSAGE_CHARS = 200_000;
 const MIN_KEEP = 4;
 
@@ -14,9 +14,9 @@ export function trimHistory(
     content:
       m.content.length > MAX_SINGLE_MESSAGE_CHARS
         ? m.content.slice(0, MAX_SINGLE_MESSAGE_CHARS) +
-          '\n\n[Message truncated — original was ' +
-          m.content.length +
-          ' chars]'
+        '\n\n[Message truncated — original was ' +
+        m.content.length +
+        ' chars]'
         : m.content,
   }));
 
@@ -44,10 +44,11 @@ export function trimHistory(
         category: 'trimmed-history',
       }).catch((err) => { console.warn('[memory] failed to log history trim:', err); });
     }
-    trimmed.unshift({
-      role: 'user',
-      content: `[System: ${dropped} older message(s) were trimmed to stay within context limits. Continue from the most recent context.]`,
-    });
+    // Prepend the notice to the first user message rather than inserting a new
+    // model-role message at position 0, which would violate the Gemini API
+    // requirement that chat history must start with a 'user' turn.
+    const notice = `[System: ${dropped} older message(s) were trimmed to stay within context limits. Continue from the most recent context.]\n\n`;
+    trimmed[0] = { ...trimmed[0], content: notice + trimmed[0].content };
   }
 
   return trimmed;

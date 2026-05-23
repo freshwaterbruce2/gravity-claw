@@ -7,11 +7,29 @@
   overflow: auto;
 }
 
+.skills-page h3 {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.skills-page p {
+  font-size: var(--text-sm);
+}
+
 .skills-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-4);
+}
+
+.skills-header-title {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.skills-header-subtitle {
+  font-size: var(--text-sm);
 }
 
 .skills-search {

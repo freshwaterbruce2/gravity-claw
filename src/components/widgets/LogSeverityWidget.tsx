@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { Page } from '../../App';
 import { useLogStore, type LogLevel } from '../../stores/logStore';
+import { formatRelativeTime } from '../../lib/time';
 
 interface LogSeverityWidgetProps {
   onNavigate: (page: Page) => void;
@@ -15,14 +16,6 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
 };
 
 const ALL_LEVELS: LogLevel[] = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'SKILL'];
-
-function formatRelativeTime(date: Date): string {
-  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diffSec < 60) return `${diffSec}s`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
-  return `${Math.floor(diffMin / 60)}h`;
-}
 
 export default function LogSeverityWidget({ onNavigate }: LogSeverityWidgetProps) {
   const { logs } = useLogStore();
@@ -48,8 +41,8 @@ export default function LogSeverityWidget({ onNavigate }: LogSeverityWidgetProps
       <div className="section-header">
         <span className="section-title">&#9638; LOG SEVERITY</span>
         <button
-          className="btn btn-ghost"
-          style={{ height: 26, fontSize: 11 }}
+          type="button"
+          className="btn btn-ghost btn-header-sm"
           onClick={() => onNavigate('console')}
         >
           View Console
@@ -74,10 +67,7 @@ export default function LogSeverityWidget({ onNavigate }: LogSeverityWidgetProps
           {recentLogs.map((entry) => (
             <div key={entry.id} className="log-mini-entry">
               <span
-                className="log-mini-dot"
-                style={{
-                  backgroundColor: `var(--${LEVEL_COLORS[entry.level]})`,
-                }}
+                className={`log-mini-dot log-mini-dot--${LEVEL_COLORS[entry.level]}`}
               />
               <span className="log-mini-msg">{entry.message}</span>
               <span className="log-mini-time">

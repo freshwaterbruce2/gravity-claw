@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import ToggleInput from './ToggleInput';
 
 interface ModelOption {
@@ -22,6 +23,18 @@ export default function AgentConfigSection({
   availableModels,
   memory, setMemory,
 }: AgentConfigSectionProps) {
+  const { googleModels, moonshotModels, otherModels } = useMemo(() => {
+    const google: ModelOption[] = [];
+    const moonshot: ModelOption[] = [];
+    const other: ModelOption[] = [];
+    for (const m of availableModels) {
+      if (m.provider === 'google') google.push(m);
+      else if (m.provider === 'moonshot') moonshot.push(m);
+      else other.push(m);
+    }
+    return { googleModels: google, moonshotModels: moonshot, otherModels: other };
+  }, [availableModels]);
+
   return (
     <section className="settings-section card">
       <div className="section-header">
@@ -51,25 +64,23 @@ export default function AgentConfigSection({
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
           >
-            {availableModels.some((m) => m.provider === 'google') && (
+            {googleModels.length > 0 && (
               <optgroup label="Google Gemini">
-                {availableModels.filter((m) => m.provider === 'google').map((entry) => (
+                {googleModels.map((entry) => (
                   <option key={entry.id} value={entry.id}>{entry.label}</option>
                 ))}
               </optgroup>
             )}
-            {availableModels.some((m) => m.provider === 'moonshot') && (
+            {moonshotModels.length > 0 && (
               <optgroup label="Moonshot Kimi">
-                {availableModels.filter((m) => m.provider === 'moonshot').map((entry) => (
+                {moonshotModels.map((entry) => (
                   <option key={entry.id} value={entry.id}>{entry.label}</option>
                 ))}
               </optgroup>
             )}
-            {availableModels
-              .filter((m) => m.provider !== 'google' && m.provider !== 'moonshot')
-              .map((entry) => (
-                <option key={entry.id} value={entry.id}>{entry.label}</option>
-              ))}
+            {otherModels.map((entry) => (
+              <option key={entry.id} value={entry.id}>{entry.label}</option>
+            ))}
           </select>
         </div>
 

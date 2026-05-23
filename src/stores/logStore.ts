@@ -31,7 +31,7 @@ export const useLogStore = create<LogState>((set) => ({
   logs: [],
   addLog: (entry) =>
     set((s) => ({
-      logs: [...s.logs.slice(-500), normalizeLog(entry)],
+      logs: [...s.logs.slice(-499), normalizeLog(entry)],
     })),
   replaceLogs: (entries) => set({ logs: entries.slice(-500).map((entry) => normalizeLog(entry)) }),
   clearLogs: () => set({ logs: [] }),

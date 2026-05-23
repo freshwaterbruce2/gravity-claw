@@ -12,3 +12,12 @@ release/
 *.log
 *.tsbuildinfo
 .server-port
+
+# Tauri CLI generated bindings / assets (regenerate with `tauri dev` / `tauri build`)
+src-tauri/gen/
+src-tauri/updater.key
+src-tauri/updater.key.local
+src-tauri/updater.key.local.pub
+
+# Server build output
+server/dist/

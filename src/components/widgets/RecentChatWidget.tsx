@@ -19,8 +19,7 @@ export default function RecentChatWidget({ onNavigate }: RecentChatWidgetProps) 
       <div className="section-header">
         <span className="section-title">◉ RECENT CHAT</span>
         <button
-          className="btn btn-ghost"
-          style={{ height: 26, fontSize: 11 }}
+          className="btn btn-ghost btn-xs"
           onClick={() => onNavigate('chat')}
         >
           Open chat

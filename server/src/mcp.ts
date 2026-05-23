@@ -1,6 +1,7 @@
-import { FunctionDeclaration, SchemaType } from '@google/generative-ai';
+import type { FunctionDeclaration } from '@google/generative-ai';
+import { SchemaType } from '@google/generative-ai';
 
-const GATEWAY_URL = 'http://localhost:3100';
+const GATEWAY_URL = process.env.MCP_GATEWAY_URL?.trim() || 'http://localhost:3100';
 const MAX_TOOL_RESULT_BYTES = 50_000;
 
 export interface McpTool {
@@ -63,31 +64,40 @@ export function extractGatewayTools(payload: unknown): McpTool[] {
 }
 
 export async function fetchAllMcpTools(): Promise<McpServerWithTools[]> {
-  try {
-    const res = await fetch(`${GATEWAY_URL}/servers`);
-    if (!res.ok) return [];
-    const servers = extractGatewayServerList(await res.json() as unknown);
+  const res = await fetch(`${GATEWAY_URL}/servers`, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) return [];
+  const servers = extractGatewayServerList(await res.json() as unknown);
 
-    const serverTools = await Promise.all(
-      servers.map(async (server) => {
-        try {
-          const tRes = await fetch(`${GATEWAY_URL}/servers/${server}/tools`);
-          if (!tRes.ok) return null;
-          const tools = extractGatewayTools(await tRes.json() as unknown);
-          return { server, tools };
-        } catch {
-          return null;
-        }
-      })
-    );
-    return serverTools.filter((s): s is McpServerWithTools => s !== null && s.tools.length > 0);
-  } catch (err) {
-    throw err;
+  const serverTools = await Promise.all(
+    servers.map(async (server) => {
+      try {
+        const tRes = await fetch(`${GATEWAY_URL}/servers/${server}/tools`, { signal: AbortSignal.timeout(10_000) });
+        if (!tRes.ok) return null;
+        const tools = extractGatewayTools(await tRes.json() as unknown);
+        return { server, tools };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[mcp] Failed to fetch tools from server "${server}": ${message}`);
+        return null;
+      }
+    })
+  );
+  return serverTools.filter((s): s is McpServerWithTools => s !== null && s.tools.length > 0);
+}
+
+function safeStringify(data: unknown): string | null {
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return null;
   }
 }
 
 function truncateToolResult(data: unknown): unknown {
-  const json = JSON.stringify(data);
+  const json = safeStringify(data);
+  if (json === null) {
+    return { _truncated: true, _error: 'Result contains circular references and could not be serialized.' };
+  }
   if (json.length <= MAX_TOOL_RESULT_BYTES) return data;
 
   // Truncate and return a summary so the model knows to make more specific queries
@@ -106,11 +116,16 @@ export async function executeMcpTool(server: string, tool: string, args: Record<
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ server, tool, args }),
+      signal: AbortSignal.timeout(30_000),
     });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return truncateToolResult({ error: `Gateway returned ${res.status}`, body });
+    }
     const result = await res.json();
     return truncateToolResult(result);
   } catch (err: any) {
-    return { error: err.message };
+    return { error: err.message ?? 'MCP tool call failed' };
   }
 }
 

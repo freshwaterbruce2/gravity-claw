@@ -142,8 +142,8 @@
   background: rgba(248,113,113,0.03);
 }
 .log-entry--warn {
-  border-left-color: #f97316;
-  background: rgba(249,115,22,0.03);
+  border-left-color: var(--orange);
+  background: var(--orange-faint);
 }
 .log-entry--skill {
   border-left-color: var(--amber);
@@ -172,8 +172,8 @@
   background: var(--amber-muted);
 }
 .log-level--warn {
-  color: #f97316;
-  background: rgba(249,115,22,0.15);
+  color: var(--orange);
+  background: var(--orange-muted);
 }
 .log-level--error {
   color: var(--red);
@@ -199,10 +199,10 @@
 }
 
 .log-entry--error .log-message {
-  color: #fca5a5;
+  color: var(--red-light);
 }
 .log-entry--warn .log-message {
-  color: #fdba74;
+  color: var(--orange-light);
 }
 .log-entry--skill .log-message {
   color: var(--text-primary);

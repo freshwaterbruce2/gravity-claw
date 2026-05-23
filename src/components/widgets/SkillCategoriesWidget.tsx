@@ -40,11 +40,8 @@ export default function SkillCategoriesWidget({ onNavigate }: SkillCategoriesWid
             <span className="skill-cat-name">{cat.name}</span>
             <div className="skill-cat-bar-track">
               <div
-                className="skill-cat-bar-fill"
-                style={{
-                  width: `${(cat.count / maxCount) * 100}%`,
-                  backgroundColor: `var(--${BAR_COLORS[i % BAR_COLORS.length]})`,
-                }}
+                className={`skill-cat-bar-fill skill-cat-bar-fill--${BAR_COLORS[i % BAR_COLORS.length]}`}
+                style={{ width: `${(cat.count / maxCount) * 100}%` }}
               />
             </div>
             <span className="skill-cat-count">{cat.count}</span>
@@ -54,10 +51,10 @@ export default function SkillCategoriesWidget({ onNavigate }: SkillCategoriesWid
 
       <div className="skill-cat-total">{skills.length} skills loaded</div>
 
-      <div style={{ textAlign: 'right', marginTop: 8 }}>
+      <div className="skill-cat-actions">
         <button
-          className="btn btn-ghost"
-          style={{ height: 26, fontSize: 11 }}
+          type="button"
+          className="btn btn-ghost btn-header-sm"
           onClick={() => onNavigate('skills')}
         >
           View all
