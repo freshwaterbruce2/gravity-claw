@@ -29,13 +29,10 @@ if "%TAURI_SIGNING_PRIVATE_KEY%"=="" (
     set /p TAURI_SIGNING_PRIVATE_KEY=<"%TAURI_SIGNING_PRIVATE_KEY_PATH%"
 )
 
-pnpm run build
+call pnpm run build
 if errorlevel 1 exit /b %errorlevel%
 
-pnpm run build:server
-if errorlevel 1 exit /b %errorlevel%
-
-pnpm tauri build
+call pnpm tauri build --ignore-version-mismatches
 if errorlevel 1 exit /b %errorlevel%
 
 echo.

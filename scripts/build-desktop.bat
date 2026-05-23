@@ -13,14 +13,11 @@ if errorlevel 1 exit /b %errorlevel%
 cd /d "%~dp0\.."
 
 REM Build web + server bundles
-pnpm run build
-if errorlevel 1 exit /b %errorlevel%
-
-pnpm run build:server
+call pnpm run build
 if errorlevel 1 exit /b %errorlevel%
 
 REM Build Tauri desktop app (unsigned — fast)
-pnpm tauri build --no-sign
+call pnpm tauri build --no-sign --ignore-version-mismatches
 if errorlevel 1 exit /b %errorlevel%
 
 echo.

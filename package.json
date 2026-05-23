@@ -24,7 +24,7 @@
     "self-improve": "powershell -ExecutionPolicy Bypass -File scripts/apply-improvement.ps1",
     "inngest:dev": "node scripts/start-inngest-dev.mjs",
     "build:server": "node scripts/bundle-server.mjs",
-    "build:desktop": "scripts/build-desktop.bat",
+    "build:desktop": ".\\scripts\\build-desktop.bat",
     "build:desktop:signed": "echo Run scripts/build-desktop-signed.bat to build with update signing"
   },
   "dependencies": {
