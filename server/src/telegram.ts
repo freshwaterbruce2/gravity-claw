@@ -3,7 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { setTelegramBridgeStatus } from './integrations.js';
 import { setHeartbeatDeps } from './inngest-functions.js';
 import { emitIntegrationSnapshot } from './emitters.js';
-import { sendWithFallback, DEFAULT_MODEL } from './gemini.js';
+import { sendWithFallback, DEFAULT_MODEL, getSystemInstruction } from './gemini.js';
+import { isOpenAIModel, handleOpenAIChat } from './openai.js';
 import { state } from './state.js';
 
 const requireModule = createRequire(import.meta.url);
@@ -109,7 +110,23 @@ export async function handleTelegramText(
   );
   try {
     await ctx.sendChatAction('typing');
-    const reply = await deps.sendWithFallback(deps.genAI, ctx.message.text);
+    
+    let reply = '';
+    const writer = {
+      write: async (chunk: string) => {
+        reply += chunk;
+      }
+    };
+
+    const model = state.appConfig.model || DEFAULT_MODEL;
+    
+    if (isOpenAIModel(model)) {
+      await handleOpenAIChat('', model, [{ role: 'user', content: ctx.message.text }], getSystemInstruction(), writer);
+    } else {
+      const fallbackReply = await deps.sendWithFallback(deps.genAI, ctx.message.text);
+      reply = fallbackReply ?? '';
+    }
+
     if (reply) {
       if (reply.length > 4096) {
         for (let i = 0; i < reply.length; i += 4096) {

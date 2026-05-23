@@ -28,7 +28,7 @@ import { emitTaskSnapshot, emitConfigSnapshot, emitIntegrationSnapshot, buildDas
 import { rebuildMcpToolRegistry, refreshMcpTools } from './tool-registry.js';
 import { ensureMcpGateway, loadSoul } from './gateway.js';
 import { DEFAULT_MODEL, getSystemInstruction, handleFunctionCalls, resolveModelId } from './gemini.js';
-import { isKimiModel, handleKimiChat } from './kimi.js';
+import { isOpenAIModel, handleOpenAIChat, getCodexToken } from './openai.js';
 import { trimHistory } from './history.js';
 import { initTelegramBridge } from './telegram.js';
 import { optionalAuth, inngestAuth } from './auth.js';
@@ -183,25 +183,21 @@ app.post('/api/refresh-tools', async (c) => {
 app.post('/api/chat', async (c) => {
   let body: {
     messages?: { role: string; content: string }[];
-    model?: string; apiKey?: string; kimiApiKey?: string; system?: string;
+    model?: string; apiKey?: string; system?: string;
   };
   try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
-  const { messages, model = state.appConfig.model ?? DEFAULT_MODEL, apiKey, kimiApiKey, system } = body;
+  const { messages, model = state.appConfig.model ?? DEFAULT_MODEL, apiKey, system } = body;
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return c.json({ error: 'messages array is required' }, 400);
   }
   const trimmedMessages = trimHistory(messages);
 
-  if (isKimiModel(model)) {
-    const resolvedKimiKey = kimiApiKey || process.env.KIMI_API_KEY;
-    if (!resolvedKimiKey || typeof resolvedKimiKey !== 'string') {
-      return c.json({ error: 'Missing Kimi API key. Add it in Settings.' }, 401);
-    }
+  if (isOpenAIModel(model)) {
     return stream(c, async (writer) => {
       try {
-        await handleKimiChat(resolvedKimiKey, model, trimmedMessages, system ?? getSystemInstruction(), writer);
+        await handleOpenAIChat(apiKey || '', model, trimmedMessages, system ?? getSystemInstruction(), writer);
       } catch (err: unknown) {
-        await writer.write(`\n\n[ERROR: ${err instanceof Error ? err.message : 'Kimi API error'}]`);
+        await writer.write(`\n\n[ERROR: ${err instanceof Error ? err.message : 'Chat execution error'}]`);
       }
     });
   }
@@ -260,13 +256,10 @@ app.get('/api/models', (c) => c.json({
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'google' },
     { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'google' },
     { id: 'gemini-flash-latest', label: 'Gemini Flash Latest', provider: 'google' },
-    { id: 'kimi-k2.6', label: 'Kimi K2.6 (latest)', provider: 'moonshot' },
-    { id: 'kimi-k2.6-turbo', label: 'Kimi K2.6 Turbo (fast)', provider: 'moonshot' },
-    { id: 'kimi-k2.5', label: 'Kimi K2.5 (256k, multimodal)', provider: 'moonshot' },
-    { id: 'kimi-k2-thinking', label: 'Kimi K2 Thinking (deep reasoning)', provider: 'moonshot' },
-    { id: 'kimi-k2-thinking-turbo', label: 'Kimi K2 Thinking Turbo (fast)', provider: 'moonshot' },
-    { id: 'kimi-k2-turbo-preview', label: 'Kimi K2 Turbo (60 tok/s)', provider: 'moonshot' },
-    { id: 'kimi-k2-0905-preview', label: 'Kimi K2 Sep 2025', provider: 'moonshot' },
+    { id: 'gpt-4o', label: 'GPT-4o (Direct OpenAI / Codex)', provider: 'openai' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o Mini (Direct OpenAI / Codex)', provider: 'openai' },
+    { id: 'o3-mini', label: 'o3-mini (Direct OpenAI / Codex)', provider: 'openai' },
+    { id: 'o1-mini', label: 'o1-mini (Direct OpenAI / Codex)', provider: 'openai' },
   ],
 }));
 
@@ -370,23 +363,24 @@ async function boot() {
 
   // Startup Environment Validation
   const hasGemini = typeof process.env.GEMINI_API_KEY === 'string' && process.env.GEMINI_API_KEY.trim().length > 0;
-  const hasKimi = typeof process.env.KIMI_API_KEY === 'string' && process.env.KIMI_API_KEY.trim().length > 0;
+  const hasOpenAI = typeof process.env.OPENAI_API_KEY === 'string' && process.env.OPENAI_API_KEY.trim().length > 0;
+  const hasCodex = typeof getCodexToken() === 'string';
 
-  if (!hasGemini && !hasKimi) {
+  if (!hasGemini && !hasOpenAI && !hasCodex) {
     console.error(
       '[gravity-claw] FATAL: No LLM API key found in environment.\n' +
-      '  Set GEMINI_API_KEY (for Gemini models) or KIMI_API_KEY (for Kimi models),\n' +
-      '  or both. Chat requests will fail without at least one key.\n' +
+      '  Set GEMINI_API_KEY or OPENAI_API_KEY.\n' +
+      '  Chat requests will fail without at least one key.\n' +
       '  Add the key(s) to your .env file and restart the server.',
     );
     process.exit(1);
   }
 
   if (!hasGemini) {
-    console.warn('[gravity-claw] WARNING: GEMINI_API_KEY is not set. Gemini models will be unavailable; only Kimi models will work.');
+    console.warn('[gravity-claw] WARNING: GEMINI_API_KEY is not set. Gemini models will be unavailable.');
   }
-  if (!hasKimi) {
-    console.warn('[gravity-claw] WARNING: KIMI_API_KEY is not set. Kimi models will be unavailable.');
+  if (!hasOpenAI && !hasCodex) {
+    console.warn('[gravity-claw] WARNING: Neither OpenAI API key nor Codex tokens were found. OpenAI models will be unavailable.');
   }
 
   state.appConfig = await getGravityClawConfig();
