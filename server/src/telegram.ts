@@ -6,6 +6,7 @@ import { emitIntegrationSnapshot } from './emitters.js';
 import { sendWithFallback, DEFAULT_MODEL, getSystemInstruction } from './gemini.js';
 import { isOpenAIModel, handleOpenAIChat } from './openai.js';
 import { state } from './state.js';
+import { trimHistory } from './history.js';
 
 const requireModule = createRequire(import.meta.url);
 
@@ -82,10 +83,46 @@ function isRateLimited(userId: number): boolean {
   return false;
 }
 
+export interface TelegramSession {
+  messages: { role: string; content: string }[];
+}
+
+export class TelegramSessionManager {
+  private sessions = new Map<string, TelegramSession>();
+
+  public getOrCreateSession(chatId: string): TelegramSession {
+    let session = this.sessions.get(chatId);
+    if (!session) {
+      session = { messages: [] };
+      this.sessions.set(chatId, session);
+    }
+    return session;
+  }
+
+  public getMessages(chatId: string): { role: string; content: string }[] {
+    return this.getOrCreateSession(chatId).messages;
+  }
+
+  public addMessage(chatId: string, role: string, content: string): void {
+    const session = this.getOrCreateSession(chatId);
+    session.messages.push({ role, content });
+  }
+
+  public clearSession(chatId: string): void {
+    this.sessions.delete(chatId);
+  }
+}
+
+export const sessionManager = new TelegramSessionManager();
+
 export interface TelegramHandlerDeps {
   allowedUserIds: number[];
   genAI: GoogleGenerativeAI;
-  sendWithFallback: (genAI: GoogleGenerativeAI, text: string) => Promise<string | null | undefined>;
+  sendWithFallback: (
+    genAI: GoogleGenerativeAI,
+    text: string,
+    history?: { role: string; parts: { text: string }[] }[],
+  ) => Promise<string | null | undefined>;
 }
 
 export async function handleTelegramText(
@@ -104,13 +141,30 @@ export async function handleTelegramText(
     await ctx.reply('You are sending messages too quickly. Please wait a moment.');
     return;
   }
-  const preview = ctx.message.text.substring(0, 50);
+
+  const chatId = String(ctx.from?.id ?? '');
+  const userText = ctx.message.text ?? '';
+
+  if (userText.trim() === '/clear' || userText.trim() === '/reset') {
+    sessionManager.clearSession(chatId);
+    await ctx.reply('Session history cleared.');
+    return;
+  }
+
+  const preview = userText.substring(0, 50);
   console.log(
     `\n  📩 Received message from ${ctx.from?.username || ctx.from?.first_name}: ${preview}...`,
   );
   try {
     await ctx.sendChatAction('typing');
-    
+
+    // Add user message to session
+    sessionManager.addMessage(chatId, 'user', userText);
+
+    // Get and trim history
+    let history = sessionManager.getMessages(chatId);
+    history = trimHistory(history);
+
     let reply = '';
     const writer = {
       write: async (chunk: string) => {
@@ -119,12 +173,22 @@ export async function handleTelegramText(
     };
 
     const model = state.appConfig.model || DEFAULT_MODEL;
-    
+
     if (isOpenAIModel(model)) {
-      await handleOpenAIChat('', model, [{ role: 'user', content: ctx.message.text }], getSystemInstruction(), writer);
+      await handleOpenAIChat('', model, history, getSystemInstruction(), writer);
+      if (reply) {
+        sessionManager.addMessage(chatId, 'assistant', reply);
+      }
     } else {
-      const fallbackReply = await deps.sendWithFallback(deps.genAI, ctx.message.text);
+      const geminiHistory = history.slice(0, -1).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }]
+      }));
+      const fallbackReply = await deps.sendWithFallback(deps.genAI, userText, geminiHistory);
       reply = fallbackReply ?? '';
+      if (reply) {
+        sessionManager.addMessage(chatId, 'assistant', reply);
+      }
     }
 
     if (reply) {

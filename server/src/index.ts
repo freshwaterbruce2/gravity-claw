@@ -28,7 +28,7 @@ import { emitTaskSnapshot, emitConfigSnapshot, emitIntegrationSnapshot, buildDas
 import { rebuildMcpToolRegistry, refreshMcpTools } from './tool-registry.js';
 import { ensureMcpGateway, loadSoul } from './gateway.js';
 import { DEFAULT_MODEL, getSystemInstruction, handleFunctionCalls, resolveModelId } from './gemini.js';
-import { isOpenAIModel, handleOpenAIChat, getCodexToken } from './openai.js';
+import { isOpenAIModel, handleOpenAIChat, getCodexToken, initOpenAI } from './openai.js';
 import { trimHistory } from './history.js';
 import { initTelegramBridge } from './telegram.js';
 import { optionalAuth, inngestAuth } from './auth.js';
@@ -406,6 +406,7 @@ async function boot() {
   startSystemMetrics(state.eventBus);
   setToolRefreshDeps({ refreshMcpTools });
   initTelegramBridge();
+  initOpenAI();
 
   const resolvedPort = await findOpenPort(PREFERRED_PORT);
 
@@ -430,3 +431,6 @@ const isMainModule =
 if (isMainModule) {
   void boot();
 }
+
+export { initTelegramBridge } from './telegram.js';
+export { initOpenAI } from './openai.js';
